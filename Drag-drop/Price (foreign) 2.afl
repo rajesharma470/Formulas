@@ -1,0 +1,4 @@
+_SECTION_BEGIN("Price");
+Ticker = ParamStr("Symbol", Name() );
+PlotForeign( Ticker, Ticker, ParamColor("Color", colorCycle ), ParamStyle("Style") | GetPriceStyle() ); 
+_SECTION_END();

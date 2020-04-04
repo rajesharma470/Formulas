@@ -1,0 +1,9 @@
+LISTING 1
+/* BBZ Trading system */
+Buy = Close > BBandTop( Close, 20, 1 );
+Sell = Close < BBandTop( Close, 20, 1 );
+Short = Close < BBandBot( Close, 20, 1 );
+Cover = Close > BBandBot( Close, 20, 1 );
+// if you want point-only test (single contract trading)
+// un-comment the line below
+// PositionSize = MarginDeposit = 1;

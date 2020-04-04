@@ -1,0 +1,79 @@
+// SVE TRENDS Trial stop function 
+SetPositionSize( 50, spsPercentOfEquity ); 
+ApplyStop(stopTypeProfit, stopModePercent, 5, True);
+ATRVar = Optimize("ATR", 3, 1, 10, 0.5);//2.8
+periodVar = Optimize("Period", 20, 1, 100, 1);//10
+ATRfact = ATRVar;//Param( "ATR multiplication", ATRVar, 1, 10, 0.1 ); 
+period = periodVar ;//Param( "ATR Period", periodVar, 1, 100 ); 
+
+HiLo = IIf( (H-L) < 1.5 * MA( H-L, period ), H-L, 1.5 * MA( H-L, period ) ); 
+
+Href = IIf( L <= Ref( H, -1 ), H - Ref( C, -1 ), ( H - Ref( C, -1 ) ) - ( L - Ref( H, -1 ) ) / 2 ); 
+Lref = IIf( H >= Ref( L, -1 ), Ref( C, -1 ) - L, ( Ref( C, -1 ) - L ) - ( Ref( L, -1 ) - H ) / 2 ); 
+diff1 = Max( HiLo, Href ); 
+diff2 = Max( diff1, Lref ); 
+ATRmod = Wilders( diff2, period ); 
+
+loss = atrfact * ATRmod; 
+resistance = C + loss; 
+
+support = L; 
+trends = H; 
+
+for( i = 4; i < BarCount; i++ ) 
+{ 
+  if( L[ i ] >= L[ i-2 ] AND 
+      L[ i-1 ] >= L[ i-2 ] AND 
+      L[ i-3 ] >= L[ i-2 ] AND 
+      L[ i-4 ] >= L[ i-2 ] ) 
+  { 
+    support[ i ] = L[ i - 2]; 
+  } 
+  else 
+  if( L[ i ] > H[ i-1 ] * 1.0013 ) 
+  { 
+    support[ i ] = H[ i-1 ] * 0.9945; 
+  } 
+  else 
+  if( L[ i ] > support[ i-1 ] * 1.1 ) 
+  { 
+     support[ i ] = support[ i-1 ] * 1.05; 
+  } 
+  else 
+  { 
+     support[ i ] = support[ i-1 ]; 
+  } 
+
+  if( H[ i ] > trends[ i-1 ] AND 
+      H[ i-1 ] > trends[ i-1 ] ) 
+  { 
+      trends[ i ] = Max( trends[ i-1 ], support[ i ] ); 
+  } 
+  else 
+  if( H[ i ] < trends[ i-1 ] AND 
+      H[ i-1 ] < trends[ i-1 ] )   
+  { 
+      trends[ i ] = Min( trends[ i-1 ], resistance[ i ] ); 
+  } 
+  else 
+  if( H[ i ] >= trends[ i-1 ] ) 
+      trends[ i ] = support[ i ]; 
+  else 
+      trends[ i ] = resistance[ i ]; 
+   
+} 
+
+Plot( trends, "Trends", colorRed ); 
+Plot( C, "Price", colorBlack, styleBar ); 
+Buy = Cross( C, trends ); 
+Sell = Cross( trends, H ); 
+Short = Sell;
+Cover = Buy;
+
+Buy = ExRem( Buy, Sell ); // remove ex. signals 
+Sell = ExRem(Sell, Buy);
+
+//ApplyStop(stopTypeNBar, stopModeBars, 5, True);
+
+PlotShapes( Buy * shapeUpArrow, colorGreen ); 
+PlotShapes( Sell * shapeDownArrow, colorRed );

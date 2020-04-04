@@ -1,0 +1,14 @@
+// Example7B.afl
+// A trading system based on the
+// crossover of two moving averages.
+// Buy when the faster moving average // crosses up through the slower moving // average.
+// Sell when the faster moving average // crosses down through the slower
+// moving average.
+// This version adds multiple positions // for use with a portfolio.
+NumPos = 3;
+SetOption( "MaxOpenPositions", NumPos );
+SetPositionSize( 100 / NumPos, spsPercentOfEquity );
+FastMA = MA( C, 5 );
+SlowMA = MA( C, 20 );
+Buy = Cross( FastMA, SlowMA );
+Sell = Cross( SlowMA, FastMA );

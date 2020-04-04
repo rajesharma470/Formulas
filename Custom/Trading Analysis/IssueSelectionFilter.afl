@@ -1,0 +1,18 @@
+//Issue Selection Filter
+// Use this filter, Analysis >> Automatic Analysis>> Pick >> Explore
+PriceYearsAgo = Ref(C, -2520);
+HistoryExists = PriceYearsAgo != 0;
+
+LowestClose = LLV(C, 2520);
+PriceReasonable = LowestClose > 20.00;
+
+Liquidity = MA(C*V, 252);
+LiquidityOK = Liquidity > 1000000;
+
+Filter =HistoryExists AND PriceReasonable AND LiquidityOK;
+
+AddColumn(C, "Close", 4.2);
+AddColumn(PriceYearsAgo, "PriceYearsAgo", 4.2);
+AddColumn(LowestClose, "LowestClose", 4.2);
+AddColumn(Liquidity, "Liquidity", 4.0);
+

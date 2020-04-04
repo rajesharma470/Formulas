@@ -1,0 +1,2189 @@
+ //Automatic support resistance determination. v 3.2
+//Abnash Singh December 19, 2013
+//Copyright and all rights reserved.
+//revision Dec 28 - added custom plots
+//Revision March 7 2014 - filler lines option added
+//Revision March 8, 2014 - Camarilla and ORB lines incorporated. 
+//Revision May 22, 2014 - Gann logic improvements
+//Revision 3.1 May 22, 2014 - Gann logic improvements
+//Revision 3.2 May 25, 2014 - Inside bar logic introduced to reduce noise
+//Revision 3.3 May 28, 2014 - Error related to null rounded lows and highs for bar 0 fixed
+//Revision 3.4 August 3, 2014 - Auto plots of Fibs using manually given gap or defined lookback period
+//Revision 3.5 Nov 21, 2014 - Introduced auto signals 
+//Revisoon 3.6 Nov 25, 2014 - Auto Fib levels and Kagi lines introduced
+//January 4th 2015 - Added kagi charts titles.
+//Revison 4.3 Profit module shows and prints profits correctly.
+//Revision 5 Auto trades added for SR and retracement methods 
+//Revision 5.1 Writes displayed trades to file for re-use
+//Revision 5.3 Added stoploss ratio and trailing SL
+//Revision 5.4.2 Skips short trades optionally.
+//Revision 5.4.1 MA-SR bug which was counting trade gap from MA cross incorrectly for longs fixed.
+//Revision 5.4.2 added 2 new profit exit modes - Target 2 and Threshold
+//Revision 5.4.3 Changes in MA cross logic and introducing pure MA cross trade type coupled with GannTrend
+
+
+//Current trade types :
+//All trades use Gann Trend confirmation for entry of Buys and Shorts.
+//Retracement : Swing based entries based on retracement logic
+//SR Swing : Swing based entries based on support and resistance breaks
+//SR Break : New trades on break of every support and resistance
+//MA versions of Retracement and SR Swing : Requires moving averages to cross over to confirm a buy or short entry
+//MA Cross : Trades based on Moving Average Crossover.
+
+SetBarsRequired(10000,10000);
+
+function timecon(intime)//converts time given as 930 to 09:30 and so on.
+{
+	xhr=int(intime/100);
+	xmin=intime%100;
+	xhrx=WriteIf(xhr<10,"0"+NumToStr(xhr,1,0),NumToStr(xhr,1,0));
+	xminx=WriteIf(xmin<10,"0"+NumToStr(xmin,1,0),NumToStr(xmin,1,0));
+	xhrx=xhrx+":"+xminx;
+	return xhrx;
+}
+function roundy(x,y,i,fac,decimals) 
+{
+
+
+result=0;div=1;
+fac1=fac;
+x1=x;y1=y;
+
+if (int(fac)!=fac){fac1=fac*10^decimals;x1=x1*10^decimals;y1=y1*10^decimals;div=10^decimals;}  
+
+
+Outh=int(x1/fac1)*fac1;
+Outl=int(y1/fac1)*fac1;
+
+
+Outl=IIf(Outl*IIf(fac<1 AND y*div!=Outl,fac,1)/div<y,int((Outl+fac1)/fac1)*fac1,Outl);
+
+
+if (int(fac)!=fac){Outh=Outh/div;Outl=Outl/div;}
+
+
+//if (!IsNull(outh) AND (Outh>x OR Outh<y))Outh=Null;
+//if (!IsNull(outl) AND (Outl>x OR Outl<y))Outl=Null;
+//if (!IsNull(Outh) AND IsNull(Outl))Outl=Outh;
+//if (!IsNull(Outl) AND IsNull(Outh))Outh=Outl;
+
+//Outh=IIf(Outh<y,Null,IIf(Outh>x,Null,Outh));
+//Outl=IIf(outl>x,outh,IIf(Outl>Outh,Outh,Outl));
+if (!IsNull(Outh) AND !IsNull(Outl))result=1;
+else result=0;
+
+
+
+return result;
+}
+function roundx(x,y,i,fac,decimals) 
+{
+global ah,al;
+
+result=0;div=1;
+fac1=fac;
+x1=x;y1=y;
+
+if (int(fac)!=fac){fac1=fac*10^decimals;x1=x1*10^decimals;y1=y1*10^decimals;div=10^decimals;}  
+
+
+Outh=int(x1/fac1)*fac1;
+Outl=int(y1/fac1)*fac1;
+
+
+Outl=IIf(Outl*IIf(fac<1 AND y*div!=Outl,fac,1)/div<y,int((Outl+fac1)/fac1)*fac1,Outl);
+
+
+if (int(fac)!=fac){Outh=Outh/div;Outl=Outl/div;}
+
+
+if (!IsNull(outh) AND (Outh>x OR Outh<y))Outh=Null;
+if (!IsNull(outl) AND (Outl>x OR Outl<y))Outl=Null;
+if (!IsNull(Outh) AND IsNull(Outl))Outl=Outh;
+if (!IsNull(Outl) AND IsNull(Outh))Outh=Outl;
+
+//Outh=IIf(Outh<y,Null,IIf(Outh>x,Null,Outh));
+//Outl=IIf(outl>x,outh,IIf(Outl>Outh,Outh,Outl));
+if (!IsNull(Outh) AND !IsNull(Outl))result=1;
+else result=0;
+
+ah[i]=Outh;
+al[i]=Outl;
+
+return result;
+}
+
+Namebn="BANKNIFTY-I";
+Namenf="NIFTY-I"; 
+startx=Param("How many days of data to use?",20,1,3000,1);
+plotsrchart=ParamToggle("Show SR Chart","No|Yes",0);
+plotkagichart=ParamToggle("Show Kagi Chart","No|Yes",1);
+showganntitle=ParamToggle("Swing Profits?","No|Yes",0);
+plotSR=ParamToggle("Show SR Averages ","Off|On",1);
+plotsrbars=ParamToggle("Show SR Bars ","Off|On",1);
+kagibarc=Param("How Many Kagi bars?",10,1,1000,1);
+kagioffset=Param("Offset from end",0,0,200,10);
+
+ohlccolor=ParamToggle("Candle/Bar color","Grey|Normal");
+plotSAR=ParamToggle("Show SAR Averages","Off|On",0);
+showvol=ParamToggle("Show Volatility Band","Off|On",0);
+
+avperiod1=Param("Average period fast 1", 6,0,40,1);
+avperiod2=Param("Average period fast 2", 12,0,60,1);
+avperiod3=Param("Average period slow", 35,0,150,1);
+Var=ParamToggle("Variable/Fixed","Fixed|Variable",0); 
+rfac1=Param("S/R gap",1,0,50,1);
+fillerbar=ParamToggle("Show Filler lines","No|Yes",1);
+
+swname=Paramlist("Switch to NIFTY (yes)/No (BANKNIFTY","BANKNIFTY|NIFTY|Default",1);
+mLine1=Param("Line 1 level",0,0,20000,0.01);
+mLine2=Param("Line 2 level",0,0,20000,0.01);
+mLine3=Param("Line 3 level",0,0,20000,0.01);
+mLine4=Param("Line 4 level",0,0,20000,0.01);
+mLine5=Param("Line 5 level",0,0,20000,0.01);
+
+rangeperiod=Param("Period for range lookback",50,10,200,1);
+showatr=ParamToggle("Show traded range ?","No|Yes",0);
+showorb=ParamList("Show ORB ? Single/Double","None|Single|Double",0);
+showcam=Paramlist("Show Camarilla","Cam|Orb|None",2);
+camperiod=ParamList("Camarilla period","Daily|Weekly|Fortnightly|Monthly",0);
+showwhat=IIf(ParamList("Camarilla - Current or next period Levels","Current|Next")=="Next",1,-1);
+showmid=ParamToggle("Show Camarilla midline","Off|On",0);
+writeall=ParamTrigger("Write all rounded records","Write");
+printall=ParamTrigger("Print trades","Print All");
+writetrades=ParamTrigger("Write trades to file","Output All Trades");
+readtrades=ParamTrigger("Read trades from file","Read All Trades");
+
+showsr=ParamToggle("Show PK/TR support/resistances","No|Yes",0);
+showpktrfib=ParamToggle("Show PK/TR fibs","No|Yes",0);
+srarrayindex=Param("SR Array Index",8,0,40,1);
+srmid=ParamToggle("Show mid SR?","No|Yes",0);
+
+
+
+
+
+fibmid=fibhigh=fiblow=fib764=fib618=fib382=fib236=Null;
+
+
+
+mLine1=IIf(mLine1==0,Null,mLine1);
+mLine2=IIf(mLine2==0,Null,mLine2);
+mLine3=IIf(mLine3==0,Null,mLine3);
+mLine4=IIf(mLine4==0,Null,mLine4); 
+mLine5=IIf(mLine5==0,Null,mLine5);
+sname=Name();
+if (StrLeft(Name(),5)=="NIFTY" AND swname=="NIFTY"){SetForeign(Namenf);sname=Namenf;}
+else if (StrLeft(Name(),9)=="BANKNIFTY" AND swname=="BANKNIFTY"){SetForeign(Namebn);sname=Namebn;}
+
+rfac=0;
+if (Interval()<=300)
+{
+	if (StrLeft(Name(),5)=="NIFTY")rfac=4;
+	else if (StrLeft(Name(),9)=="BANKNIFTY")rfac=8;
+	else if (StrLeft(Name(),7)=="YESBANK")rfac=1;
+	else if (StrLeft(Name(),2)=="ES")rfac=4;
+	else rfac=1;
+}
+else if (Interval()>=3600)
+{
+	if (StrLeft(Name(),5)=="NIFTY")rfac=16;
+	else if (StrLeft(Name(),9)=="BANKNIFTY")rfac=40;
+	else if (StrLeft(Name(),7)=="YESBANK")rfac=4;
+	else if (StrLeft(Name(),2)=="ES")rfac=2;
+	else rfac=1;
+}
+else if (Interval()>300)
+{
+	if (StrLeft(Name(),5)=="NIFTY")rfac=8;
+	else if (StrLeft(Name(),9)=="BANKNIFTY")rfac=20;
+	else if (StrLeft(Name(),7)=="YESBANK")rfac=2;
+	else if (StrLeft(Name(),2)=="ES")rfac=1;
+	else rfac=1;
+}
+
+barind=BarIndex();
+sbb=SelectedValue(BarIndex());
+dtx=Day();
+mth=Month()*100;
+Yr=Year();
+Hr=Hour();
+Mn=Minute();
+Chid=GetChartID();
+sdtx=SelectedValue(dtx);
+smth=SelectedValue(mth);
+sYr=SelectedValue(yr);
+sHr=SelectedValue(Hr);
+sMn=SelectedValue(Mn);
+
+if (Var)rfac=rfac1;
+
+
+barind=BarIndex();
+sbb=SelectedValue(BarIndex());
+//Output=int(input);
+
+
+ah=al=to=th=tl=tc=Null;
+dtx=Day();
+mth=Month();
+Yr=Year();
+Hr=Hour();
+Mn=Minute();
+hrmn=hr*100+mn;
+selyr=SelectedValue(yr);
+selmth=SelectedValue(mth);
+seldtx=SelectedValue(dtx);
+selhr=SelectedValue(hr);
+selmn=SelectedValue(mn);
+ddx=DaysSince1900();
+ddxbc=ddx[BarCount-1];
+
+
+
+Val=freq=0;
+jcount=jlim=0;
+Lastah=Lastal=0;
+//ORB Variables
+timesetting=093000;
+tn=TimeNum();
+Datey=DateNum();
+fastprice=lev=0;
+avp=(O+C)/2;
+
+
+daysttime=091500;
+bardb=IIf(tn==daysttime,1,0);
+r2=s2=ar1=ar2=ar3=bs1=bs2=bs3=0;
+fastbuy=fastsell=0;
+Lastsig=Buycond=Shortcond=dayopen=dayclose=prevdayhigh=prevdaylow=dayhigh=daylow=xh=xl=xc=xxh=xxl=xcmid=cline=v1=v2=0;
+//Orb end
+//Cam on
+if (showcam=="Cam")
+{
+	cperiod=inDaily;
+	if (camperiod=="Daily")cperiod=inDaily;
+	else if (camperiod=="Weekly")cperiod=inweekly;
+	else if (camperiod=="Fortnightly")cperiod=inWeekly*2;
+	else if (camperiod=="Monthly")cperiod=inmonthly;
+	XH = TimeFrameGetPrice( "H", cperiod,showwhat);
+	XL = TimeFrameGetPrice( "L", cperiod,showwhat);
+	XC = TimeFrameGetPrice( "C", cperiod, showwhat );
+}
+//
+
+
+
+
+avin[BarCount-1]=Lastah;
+to[BarCount-1]=O[BarCount-1];
+th[BarCount-1]=H[BarCount-1];
+tl[BarCount-1]=L[BarCount-1];
+tc[BarCount-1]=C[BarCount-1];
+
+if (showcam=="Cam")
+{
+	mline1=r2=(((xh-xl)*1.1)/2)+xc;
+	mline2=r1=(((xh-xl)*1.1)/4)+xc;
+	mline3=s1=(xc-((xh-xl)*1.1)/4);
+	mline4=s2=(xc-((xh-xl)*1.1)/2);
+	if (showmid)mline5=(mline2+mline3)/2;
+}
+
+
+
+
+tr=ATR(rangeperiod);
+Ht=tr[BarCount-10]/3;
+if (showatr)PlotText("Avg Range\n"+WriteVal(tr[BarCount-1],1.),BarCount-10,H[BarCount-1]+Ht,colorGreen);
+
+
+_SECTION_BEGIN("Custom_Signals");
+
+showauto= ParamToggle ("Show Auto Signals","No|Yes",0);
+useautorange=ParamToggle ("Use Auto range","No|Yes",0);
+autodatestart=Param("Date start YYMMDD format",150101,010101,991231,1);
+autodateend=Param("Date end YYMMDD format",150101,010101,991231,1); 
+exitintraday=ParamToggle ("Exit Intraday?","No|Yes",0);
+skipshort=ParamToggle("Skip short signals","No|Yes",0);
+onskipexitatsl=ParamToggle("If Skip short exit only at SL","No|Yes",0);
+setbuy = ParamTrigger("Buy", "Buy" );
+setsell = ParamTrigger("Sell", "Sell" );
+setshort = ParamTrigger("Short", "Short" ); 
+setcover = ParamTrigger("Cover", "Cover" );
+showprice=ParamToggle("Show Trade Value?","No|Yes",1);
+targetmode=ParamToggle("Target Ratio/abs","Abs|Ratio",1);
+target = Param("Target",0,0,450,1);
+targetratio=Param("Target Ratio",1,1,10,.1);
+target2ratio=Param("Target2 Ratio",4,1,10,.1);
+threshtog=1;//ParamToggle("Threshold on?","Off|On",0);
+threshpoints=Param("Threshold Exit Points",25,1,100,1);
+usethreshratio=ParamToggle("Use Threshold Ratio?","Off|On",0);
+threshratio=Param("Threshold TSL Ratio",1,1,2.5,.1);
+showthreshold=ParamToggle("Show Threshold Level?","Off|On",0);
+
+slmult=Param("Stop loss multiplier",1,1,10,.1);
+tslfac=Param("Trailing Stop Loss",0,0,2,.1);
+trademode = Paramlist("Trade Mode","Retrace|SR-Swing|SR-Break|MA-Retrace|MA-SR|MA-Cross",0);
+crosslim = Param("Crossover bars for MA Filter",11,0,50,1);
+maadj=ParamToggle("Delay MA Cross?","No|Yes",0);
+madist=Param("Distance between MA's at Cross",0,0,100,1);
+hhl=ParamToggle("Long High/Short Low ","No|Yes",1);
+sethigh=ParamTrigger("Set High for MM", "Set High" );
+setlow=ParamTrigger("Set Low for MM", "Set Low" );
+suppresson = ParamTrigger("Suppress Auto Sig", "From this bar" );
+suppressoff = ParamTrigger("Clear Last Suppress", "From hereon" );
+clear = ParamTrigger("Clear Buy Sell", "Clear this signal" );
+clearall = ParamTrigger("Clear All Buy Sell", "Clear all trade signals" );
+srn=150;
+for (i=1;i<=srn;i++)
+{
+	VarSet("sr"+i,Null);
+}
+//sr1=sr2=sr3=sr4=sr5=sr6=sr7=sr8=sr9=sr10=sr11=sr12=Null;
+Buy=Sell=Short=Cover=lastsig=lastsigi=prevsig=prevsigi=profit=suppon=supoff=exitsigi=
+	tradetypex=exitprice=tradeprice=Maxprofit=Minprofit=targetprofit=slpoints=systemtarget=systemtarget2=systemtargetlevel=nlong=nshort=
+	Maxprofitprev=Minprofitprev=targetprofitprev=target2profitprev=threshprofitprev=exitprofit=exitprofitprev=cumexitprofit=cumtargetprofit=sigi=exiti=tr=
+	dispcumtargetprofit=dispcumexitprofit=dispcumtarget2profit=dispcumthreshprofit=tradect=cumtarget2profit=target2profit=threshprofit=cumthreshprofit=threshval=
+	cumlosse=cumgaine=cumlossr=cumgainr=cumlgaint=cumlosst=cumgaint=cumgaint2=cumlosst2=cprofitflag=nextlong=nextshort=lasttrigger=ztrig=clevel=clevelsig=s1dc=s1uc=r1dc=r1uc=
+	zeodtc=zeodc=cumeode=cumeodr=cumeodt=cumeodt2=cume=cumt=cumt2=cumr=brok=maxprofit=maxprice=minprice=lastcheck=dircount=totalprofit=totalprofitcum=
+	prcount=prnegct=lastsig=sigarray=cumprofit=txnprofit=lastsig1=lastsig1i=prevtxnprofit=cumtargetprofit=txntargetprofit=txntarget2profit=prevtxntargetprofit=targetcum=target2cum=
+	todaystargetprofit=todaystarget2profit=targetprofit2=threshold=threshcross=threshcrossi=threshflagi=threshstatus=target2=
+	successe=successr=successt=successt2=0;
+BuyPrice=ShortPrice=0;
+plotthreshold=plottarget1=sl=Null;
+Chid=GetChartID();
+jstore=0;
+
+
+
+
+
+
+BarLum1 		= Param("Bar Color Intensity", 8, 0, 10,01); 
+//UpBarColor		= ColorBlend(ColorRGB(5,36,5), ColorRGB(10,75,10), BarLum1);
+//DnBarColor		= ColorBlend(ColorRGB(36,5,5), ColorRGB(75,10,10), BarLum1);
+ganncolor = ColorBlend(ColorRGB(5,36,5), ColorRGB(90,95,50), BarLum1);
+
+//BarColor		= IIf(Close > Open, UpBarColor, DnBarColor);
+//SetBarFillColor(BarColor);
+usemethod=ParamToggle("Use H-L or S-R values?","H-L|S-R",1);
+Plotg=ParamToggle("Plot Gann lines","No|Yes",1);
+Plotmm=ParamToggle("Plot MM lines","No|Yes",0);
+mmlum=Param("MM Color Intensity", 0.5, 0, 1,0.1);
+
+stylecndl=ParamToggle("Bar or Candle chart?","Bar|Candle",0);
+Showboll=ParamList("Show Bollinger Bands","Yes|No",1);
+resgap=Param("Filter res-supp gap",0,0,30,0.5);
+
+showgann=ParamToggle("Show shortest path?","No|Yes",1);
+showrev=ParamToggle("Show Reversal bar?","No|Yes",1);	
+breakout=ParamToggle("Use breakout condition?","No|Yes",0);
+iginside=ParamToggle("Ignore inside bars","No|Yes",0);
+plotupdnbarc=ParamToggle("Plot Up and Down bar count","No|Yes",0);
+OIlogic=ParamToggle("Use open/close logic for trend","No|Yes",0);
+Gannconsec=ParamToggle("Use consecutive bar logic for trend change","No|Yes",1); 
+gannbars=Param("N bars = ",2,1,10,1);
+
+zispace=Param("Kagi line spacing for fixed",0,0,20,1);
+kagicam=Paramtoggle("Camarilla On?","No|Yes");
+showkagima=ParamToggle("Show Moving averages ","No|Yes");
+kagiperc=Param("Reversal %age units ",0.05,0,1,0.01);
+fixedr=ParamList("Reversal Type","Fixed|Variable|PnF",2);
+pnfrev=Param("PnF reversal bricks",3,1,20,1);
+usevar=IIf(fixedr=="Variable",1,0);
+gapx=Param("Display Gap",20,0,100,1);
+projected=ParamToggle("Show projected | Estimated signals","No|Yes",1);
+
+Hi=Lo=hi1=lo1=hi2=lo2=fibstat=fibstati=defgap=fdiv1=0;usehl=1;
+Line0=Line1=Line2=Line3=Line4=Line5=Line6=Line7=Line8=Lineplus2=Lineminus2=Lineplus1=Lineminus1=Null;
+valabcam=valbelcam=prevxxx=xxx1=0;
+
+io=O;ic=C;ih=H;il=L;
+
+
+
+upbar=downbar=lastlo=lasthi=0;
+if (Plotg)
+{
+
+
+
+trend=IIf(OIlogic AND iO<iC,1,IIf(OIlogic AND iO>iC,-1,IIf(!OIlogic,0,0)));
+}
+if (stylecndl)stylec=styleCandle;
+else stylec=styleBar;
+sup=res=lastsig=0;
+Buy=Short=0;
+
+gannline=nextsignal=Null;
+nextsigc=gannlinebs=barhi=barlo=beglo=beghi=endi=begi=hilo=Lastlo=Lasthi=lastlo1=lasthi1=upbarconsec=downbarconsec=upbari=downbari=lastgann=0;
+gann1=gann2=gann1i=gann2i=lastganni=upstarti=downstarti=upbarc=downbarc=ganntrend=0;
+pk=tr=pki=tri=pkcount=trcount=pktr=pktrcount=lastscore=csi=pkct=trct=cscomp=cbarcount=pktrbar=pktri=0;
+ch=bh=currhigh=currlow=currvalidbar=Null;
+pkno=trno=0;
+n=1;
+barc=0;	
+csi=i0=0;
+gh1=gl1=gh=gl=lastgh=lastgl=0;
+cpk=ctr=cpklast=ctrlast=cpki=ctri=basetrend=0;
+//filtering inside bars.
+
+//Kagi variables
+ropen=rclose=rhigh=rlow=rdayclose=rdayopen=rdaych1=rdaycl1=rdaych2=rdaycl2=rdtend=Null;rvol=rcolor=revlevel=0;
+zOpen=zclose=zHigh=zLow=zdayclose=zdayopen=zdaych1=zdaycl1=zdaych2=zdaycl2=zdate=zyr=zmonth=krsmonth=krsyr=zpkno=zmid=mclose=nclose=oclose=zmaxh=krsh=zminl=krsl=maxh=minl=zminend=zdtend=Null;
+zhr=zmin=zdr=zi=zvol=rchk=zm=zdtarray=kstore=lastah=zhrend=rcheck=krscheck=zcheck=zdttime=zdbtime=dttime=dbtime=ztradetime=ztlup=ztldn=ind=0;
+Vopen=Vclose=Vhigh=Vlow=Null;Vcheck=0;
+wOpen=wClose=wHigh=wLow=Null;Vcolor=wcolor=0;
+
+kminend=kagir=khr=kmin=kagis=krs=krstype=kpktr=krsdate=krsdtend=Null;xdr=krsdtarray=krsvol=krsi=krsct=krct=ksct=kct=kr=ks=krar=ksar=lastsgap=lastrc1=lastrc1i=lastrc2=Lastrc2i=rc1=rc2=0;
+lbi1=lbi2=kagicolor=Null;
+
+kminend=kagir=khr=kmin=kagis=krs=krstype=kpktr=krsdate=krsdtend=Null;xdr=krsdtarray=krsvol=krsi=krsct=krct=ksct=kct=kr=ks=krar=ksar=lastsgap=lastrc1=lastrc1i=lastrc2=Lastrc2i=rc1=rc2=0;
+lbi1=lbi2=kagicolor=Null;
+krsmth=revprice=sup=res=0;
+ostore=jstore=kstore=rdsw=rdct=rind=rdt=ryr=rmth=rhr=rmin=rhrend=rminend=rsec=dayclose=0;
+if (showkagima)zispace=0;
+array=zi=0;
+//kagilinetype=1;
+rclin=0;
+Checklevel=checkleveli=lastind=0;
+jn=zispace;
+pnfmaf=phnfmas=zr1=zr2=zs1=zs2=Null;
+brick=rfac;
+if (fixedr=="PnF")fixedrev=brick*pnfrev;
+postrade="FR";
+intraday=postrade=="INTRA" OR StrLeft(postrade,2)=="FR";
+
+f1=EMA((iH+iL)/2,avperiod1);
+f2=eMA((iH+iL)/2,avperiod2);
+
+f1H=EMA(iH,avperiod1);
+f2H=EMA(iH,avperiod2);
+fmafact=2/(avperiod1+1);
+smafact=2/(avperiod2+1);
+f1L=EMA(iL,avperiod1);
+f2L=EMA(iL,avperiod2);
+
+
+fx=WMA((H+L)/2,avperiod3);
+f1f2compi=f2f1compi=f1f2crossi=f2f1crossi=f1f2cross=f2f1cross=0;
+Hf1f2compi=Hf2f1compi=Hf1f2crossi=Hf2f1crossi=Hf1f2cross=Hf2f1cross=0;
+Lf1f2compi=Lf2f1compi=Lf1f2crossi=Lf2f1crossi=Lf1f2cross=Lf2f1cross=0;
+stdate=stmonth=styear=0;
+for (i=i0;i<BarCount;i++)
+{
+	if (ddxbc-ddx[i]<=startx)
+	{
+	
+	if(stdate==0){stdate=dtx[i];stmonth=mth[i];styear=yr[i];}
+	
+	
+	result=roundx(iH[i],iL[i],i,rfac,0);
+	if (result==0 AND Lastah!=0)
+	{ah[i]=Lastah;al[i]=Lastal;}
+	else {Lastah=ah[i];Lastal=al[i];}
+
+	avin[i]=IIf(ah[i]!=0,(ah[i]+al[i])/2,(Lastah+lastal)/2);
+
+if (usemethod){ch[i]=bh[i]=ah[i];cl[i]=bl[i]=al[i];}
+else {ch[i]=bh[i]=H[i];cl[i]=bl[i]=L[i];}
+
+
+
+//day high low logic
+	if (i>0 AND ((showorb=="Single" OR showorb=="Double") OR showcam=="Orb"))
+	{
+			if (Datey[i]!=Datey[i-1])
+			{	
+				prevdayhigh=dayhigh[i-1];
+				prevdaylow=daylow[i-1];
+				Dayopen[i]=iO[i];
+				Dayclose[i]=iC[i];
+				Buycond=Shortcond=lastsig=0;
+				ar1=ar2=ar3=bs1=bs2=bs3=0;
+				fastprice=lev=0;
+			}
+			if (Datey[i]==Datey[i-1])
+			{
+				Dayopen[i]=Dayopen[i-1];
+				Dayclose[i]=Dayclose[i-1];
+				Dayhigh[i]=Dayhigh[i-1];
+				Daylow[i]=Daylow[i-1];
+			}
+			if (iH[i]>Dayhigh[i])Dayhigh[i]=iH[i];
+			if (Daylow[i]==0)Daylow[i]=iL[i];
+			if (iL[i]<Daylow[i])Daylow[i]=iL[i];
+// day high  low logic end
+//PlotText(WriteVal(i,1.0),i,H[i]+10,colorWhite);
+
+		if (tn[i]<timesetting AND (showorb=="Single" OR showorb=="Double"))
+		{
+//PlotText(WriteVal(1,1.0),i,H[i]+10,colorWhite);
+
+			mline2[i]=r2[i]=Dayhigh[i];
+			mline4[i]=s2[i]=Daylow[i];
+			if (showorb=="Single")mline2[i]=fastprice[i]=r2[i]=s2[i]=(Dayhigh[i]+Daylow[i])/2;
+		}
+		else if (showorb=="Single" OR showorb=="Double") 
+		{
+
+
+			mline2[i]=r2[i]=r2[i-1];
+			mline4[i]=s2[i]=s2[i-1];
+		}
+		else if (showcam=="Orb")
+		{
+			xdiff=prevdayhigh-prevdaylow;
+			if (tn[i]<timesetting)xcmid=(dayhigh[i]+daylow[i])/2;
+			
+			mline1[i]=r2[i]=(((xdiff)*1.1)/2)+xcmid;
+			mline2[i]=r1[i]=(((xdiff)*1.1)/4)+xcmid;
+			mline3[i]=s1[i]=(xcmid-((xdiff)*1.1)/4);
+			mline4[i]=s2[i]=(xcmid-((xdiff)*1.1)/2);
+			if (showmid)mline5[i]=(mline2[i]+mline3[i])/2;
+		}
+
+	}
+
+
+	
+
+
+//if(i==sbb[i])PlotText(WriteVal(xxh[i],1.0),i,H[i]+10,colorWhite);
+//if(i==BarCount-1)PlotText(WriteVal(1,1.0),i,H[i]+10,colorWhite);
+
+
+
+
+//
+if (ah[i]>mline1[i] AND al[i]<mline1[i])cline=mline1[i];
+else if (ah[i]>mline2[i] AND al[i]<mline2[i])cline=mline2[i];
+else if (ah[i]>mline3[i] AND al[i]<mline3[i])cline=mline3[i];
+else if (ah[i]>mline4[i] AND al[i]<mline4[i])cline=mline4[i];
+//Rounding end
+//additional SR lines
+if (fillerbar)
+{
+
+fdiv=round(((ah[i]-al[i])/rfac));
+fdiv1=IIf(fdiv>=2,fdiv-1,0);
+//PlotText(WriteVal(fdiv,1.2),i,H[i]+15,colorOrange);
+if (fdiv>0)
+{
+
+	fdiv1=fdiv-1;
+	if (fdiv1>srn)fdiv=srn;
+	for (j=1;j<=fdiv1;j++)
+	{
+		/*if (j==1)sr1[i]=al[i]+j*rfac;	
+		else if (j==2)sr2[i]=al[i]+j*rfac;
+		else if (j==3)sr3[i]=al[i]+j*rfac;
+		else if (j==4)sr4[i]=al[i]+j*rfac;
+		else if (j==5)sr5[i]=al[i]+j*rfac;
+		else if (j==6)sr6[i]=al[i]+j*rfac;
+		else if (j==7)sr7[i]=al[i]+j*rfac;
+		else if (j==8)sr8[i]=al[i]+j*rfac;	
+		else if (j==9)sr9[i]=al[i]+j*rfac;
+		else if (j==10)sr10[i]=al[i]+j*rfac;
+		else if (j==11)sr11[i]=al[i]+j*rfac;
+		else if (j==12){xxx=VarGet("sr"+j);xxx[i]=al[i]+j*rfac;VarSet("sr"+j,xxx);}*/
+		if (j==1)prevxxx=al[i];
+		else prevxxx=xxx1;
+		xxx=VarGet("sr"+j);xxx1=xxx[i]=al[i]+j*rfac;VarSet("sr"+j,xxx);
+		if (xxx1>cline AND prevxxx<cline){valabcam=xxx1; valbelcam=prevxxx;}
+		
+	}
+	
+}
+
+}
+v1[i]=valabcam;
+v2[i]=valbelcam;
+//if (i==sbb[i])PlotText(WriteVal(cline[i],1.0),i,H[i]+2*tr[i],colorWhite);
+
+
+if (Plotg)
+{
+
+
+
+//inside bar outside bars
+
+if (i>i0 )
+{
+	if (iginside)//ignore inside bars
+	{
+		
+		if (i-csi>=n ) //Ignore bars that have null ah and al, possible in bar 0
+		{
+			if(cscomp>0)csi=cscomp;	
+			//PlotText(WriteVal(cscomp,1.0),i,H[i]+15,colorOrange);
+			if (ah[i]>ah[csi] OR al[i]<al[csi])
+			{
+				cscomp=i;
+				//if (i==sbb[i])
+				//PlotText(WriteVal(cscomp-csi,1.0),i,H[i]+15,colorOrange);
+			}	
+		}
+	}
+	else if (i>=n)//do not ignore inside bars
+	{
+		cscomp=i;csi=i-n;
+	}
+}
+//PlotText(WriteVal(csi,1.0),i,H[i]+15,colorOrange);
+
+
+if (i>=gannbars AND i==cscomp AND i>=i0)
+{
+//if (i>begi+1)PlotText(WriteVal(I>begi+1,1.0),i,H[i]+15,colorOrange);	
+	
+	if (bh[i]>bh[csi] AND trend[i]>=0)upbarconsec=1;
+	else if(bh[i]<bh[csi] AND upbar<gannbars)upbar=upbarconsec=0;
+	//else if(bh[i]<bh[csi] AND trend[i]>=0 AND upbar<gannbars)upbar=upbarconsec=0;
+	if (bl[i]<bl[csi] AND trend[i]<=0)downbarconsec=1;
+	else if (bl[i]>bl[csi] AND downbar<gannbars)downbar=downbarconsec=0;
+	//else if (bl[i]>bl[csi] AND trend[i]<=0 AND downbar<gannbars)downbar=downbarconsec=0;
+
+	if (((upbar<gannbars AND bh[i]>bh[csi] AND trend[i]>=0 AND upbarconsec==1) OR (breakout AND bh[i]>bh[beghi]))
+			OR ((upbar>=gannbars AND bh[i]>bH[upbari] AND bh[i]>Lastgann) AND bh[i]>bh[csi] AND trend[i]>=0) )
+
+	{
+	//PlotText(WriteVal(csi,1.0),i,H[i]+15,colorOrange);
+		upbar=upbar+1;upbari=i;
+		if ((upbar>=gannbars AND i>beglo ) OR (breakout AND bh[i]>bh[beghi]))
+		{
+			if (((beghi>beglo AND bh[i]>bh[beghi]) OR beghi==0) OR beglo>beghi)
+			{
+				downbar=downbarconsec=0;
+				gann2=gann1;gann1=Lastgann;
+				gann2i=gann1i;gann1i=Lastganni;
+				lastgann=gannline[i]=bh[i];
+				barhi=1;
+				barlo=0;
+				prevhi=beghi;
+				lastganni=beghi=i;
+				if ((bh[beghi]>bh[prevhi] AND prevhi>beglo) OR beglo>prevhi)	{lasthi1=Lasthi;Lasthi=i;}
+			}
+		}
+	}
+
+	if (((downbar<gannbars AND bl[i]<bl[csi]  AND trend[i]<=0 AND downbarconsec==1) OR (breakout AND bl[i]<bl[beglo] AND i!=beghi))
+		OR ((downbar>=gannbars AND bl[i]<bL[downbari]) AND bl[i]<bl[csi] AND trend[i]<=0))
+
+	{
+		downbar=downbar+1;downbari=i;
+		if ((downbar>=gannbars AND i>beghi AND (bl[i]<Lastgann OR lastgann==0) )  OR (breakout AND bl[i]<bl[beglo] AND i!=beghi))
+		{
+			if (((beglo>beghi AND bl[i]<bl[beglo]) OR beglo==0 ) OR beghi>beglo)
+			{
+				upbar=upbarconsec=0;
+				gann2=gann1;gann1=Lastgann;
+				gann2i=gann1i;gann1i=Lastganni;
+				lastgann=gannline[i]=bl[i];
+				barlo=1;
+				barhi=0;
+				prevlo=beglo;
+				if (beglo==0 AND lastganni>0)beglo=lastganni;
+				lastganni=beglo=i;
+				if ((bl[beglo]<bl[prevlo] AND prevlo>beghi) OR beghi>prevlo){lastlo1=lastlo;Lastlo=i;}
+			}
+		}
+	}
+
+if (showrev AND plotsrchart)
+{
+	barc[i]=IIf(upbar>0 AND (upbar>=gannbars OR (upbar==1 AND gannline[i]>0) ),1,IIf(downbar>0 AND (downbar>=gannbars OR (downbar==-1 AND gannline[i]>0)),-1,0));
+	if (i>0 AND barc[i]!=barc[csi] AND barc[i]==1)PlotText("X",i,H[i]+rfac,colorgreen);	
+	else if (i>0 AND barc[i]!=barc[csi] AND barc[i]==-1)PlotText("X",i,L[i]-2*rfac,colorOrange);	
+	//PlotText(WriteVal(downbar,1.),i,h[i]+5*rfac,colorOrange);
+}
+if (i>i0 AND beglo>i0 AND beghi>i0)
+{
+	if (i==beglo)
+	{
+
+		if (prevlo>beghi)
+		{
+			if (showgann==0){begi=prevlo; begval=bl[prevlo];}
+			else {begi=Lasthi; begval=bh[lasthi];}
+			endi=beglo;endval=bl[beglo];
+		}
+		else if (beghi>prevlo)
+		{
+
+			if (showgann==0){begi=beghi; begval=bh[beghi];}
+			else {begi=Lasthi; begval=bh[lasthi];}
+			endi=beglo;endval=bl[beglo];
+		}
+	}
+	if (i==beghi)
+	{
+		if (prevhi>beglo)
+		{
+			if (showgann==0){begi=prevhi; begval=bh[prevhi];}
+			else {begi=Lastlo; begval=bl[Lastlo];}
+
+			endi=beghi;endval=bh[beghi];
+		}
+		else if (beglo>prevhi)
+		{
+			if (showgann==0){begi=beglo; begval=bl[beglo];}
+			else {begi=Lastlo; begval=bl[Lastlo];}
+			endi=beghi;endval=bh[beghi];
+		}
+	}
+
+	if (endi-begi>1)
+	{
+		incr=(endval-begval)/(endi-begi);
+		for (kg=begi;kg<=endi;kg++)
+		{
+			gannline[kg]=begval+(kg-begi)*incr;
+		}
+	}	
+
+}
+//Peaks and troughs
+if (gannline[i] AND gann1>Lastgann AND gann1>gann2)
+{
+	pkcount=pkcount+1;pktrcount=pktrcount+1;pktr[pktrcount]=pk[pkcount]=gann1;pktri[pktrcount]=pki[pkcount]=gann1i;
+	if (pktrcount>1)
+	{
+		ind=ind+1;
+		rhigh[ind]=rclose[ind]=pktr[pktrcount];
+		rlow[ind]=ropen[ind]=pktr[pktrcount-1];
+		maxh[ind]=Max(maxh[ind],H[pktri[pktrcount]]);
+		maxh[ind]=Max(maxh[ind],H[i]);
+		minl[ind]=Min(IIf(minl[ind]==0,L[pktri[pktrcount]],minl[ind]),L[pktri[pktrcount]]);
+		minl[ind]=Min(minl[ind],L[i]);
+		ryr[ind]=IIf(ryr[ind]==0,yr[pktri[pktrcount]],ryr[ind]);
+		rmth[ind]=IIf(rmth[ind]==0,mth[pktri[pktrcount]],rmth[ind]);
+		rdt[ind]=IIf(rdt[ind]==0,dtx[pktri[pktrcount]],rdt[ind]);
+		rhr[ind]=IIf(rhr[ind]==0,hr[pktri[pktrcount]],rhr[ind]);
+		rmin[ind]=IIf(rmin[ind]==0,mn[pktri[pktrcount]],rmin[ind]);
+		
+	}
+}
+else if (gannline[i] AND gann1<Lastgann AND gann1<gann2)
+{
+	trcount=trcount+1;pktrcount=pktrcount+1;pktr[pktrcount]=tr[trcount]=gann1;pktri[pktrcount]=tri[trcount]=gann1i;
+	if (pktrcount>1)
+	{
+		ind=ind+1;
+		rlow[ind]=rclose[ind]=pktr[pktrcount];
+		rhigh[ind]=ropen[ind]=pktr[pktrcount-1];
+		maxh[ind]=Max(maxh[ind],H[pktri[pktrcount]]);
+		maxh[ind]=Max(maxh[ind],H[i]);
+		minl[ind]=Min(IIf(Nz(minl[ind+rclin])==0,L[pktri[pktrcount]],minl[ind]),L[pktri[pktrcount]]);
+		minl[ind]=Min(minl[ind],L[i]);
+		ryr[ind]=IIf(ryr[ind]==0,yr[pktri[pktrcount]],ryr[ind]);
+		rmth[ind]=IIf(rmth[ind]==0,mth[pktri[pktrcount]],rmth[ind]);
+		rdt[ind]=IIf(rdt[ind]==0,dtx[pktri[pktrcount]],rdt[ind]);
+		rhr[ind]=IIf(rhr[ind]==0,hr[pktri[pktrcount]],rhr[ind]);
+		rmin[ind]=IIf(rmin[ind]==0,mn[pktri[pktrcount]],rmin[ind]);
+	}
+}
+if (lastganni>pktri[pktrcount] AND !IsNull(gannline[i]))
+{
+	rclin=1;
+	if (gannline[i]>rclose[ind])
+	{
+		rclose[ind+rclin]=rhigh[ind+rclin]=gannline[i];
+		rlow[ind+rclin]=ropen[ind+rclin]=rclose[ind];
+	}
+	else if (gannline[i]<rclose[ind])
+	{
+		rclose[ind+rclin]=rlow[ind+rclin]=gannline[i];
+		rhigh[ind+rclin]=ropen[ind+rclin]=rclose[ind];
+	}
+	maxh[ind+rclin]=Max(maxh[ind+rclin],H[i]);
+	minl[ind+rclin]=Min(IIf(Nz(minl[ind+rclin])==0,L[i],minl[ind+rclin]),L[i]);
+	ryr[ind+rclin]=IIf(ryr[ind+rclin]==0,yr[i],ryr[ind+rclin]);
+	rmth[ind+rclin]=IIf(rmth[ind+rclin]==0,mth[i],rmth[ind+rclin]);
+	rdt[ind+rclin]=IIf(rdt[ind+rclin]==0,dtx[i],rdt[ind+rclin]);
+	rhr[ind+rclin]=IIf(rhr[ind+rclin]==0,hr[i],rhr[ind+rclin]);
+	rmin[ind+rclin]=IIf(rmin[ind+rclin]==0,mn[i],rmin[ind+rclin]);
+	
+
+}
+else rclin=0;	
+	
+if (pktrcount>1 AND pktr[pktrcount]>pktr[pktrcount-1])Lastscore[i]=pktr[pktrcount]-pktr[pktrcount-1];
+else if (pktrcount>1 AND pktr[pktrcount]<pktr[pktrcount-1])Lastscore[i]=pktr[pktrcount-1]-pktr[pktrcount];
+//if (i==sbb[i])PlotText(WriteVal(rclose[ind],1.0),i,High[i]+10,colorWhite);
+//Lastscore[i]=pk[pkcount]-tr[trcount];
+//if (pktrcount>2)PlotText(WriteVal(Lastscore[i],1.0),i,H[i]+2*pgap[i],colorYellow);
+//trend line end
+}
+}
+if (i>0 AND pkcount>0 AND trcount>0)
+{
+	cpk=pk[pkcount];cpki=pki[pkcount];cpklast=pk[pkcount-1];cpklasti=pki[pkcount-1];
+	ctr=tr[trcount];ctri=tri[trcount];ctrlast=tr[trcount-1];ctlastri=tri[trcount-1];
+	/*if (( (cpk<cpklast AND ctr<ctrlast) OR (cpk==cpklast AND ctr<=ctrlast) OR (il[i]==ctr-rfac) )
+			AND cpki>ctri AND gannline[i]<gannline[i-1])basetrend[i]=IIf(showauto,-2,0);//(lastsig!=-1 OR exitsigi>lastsigi)check=-2; AND 
+	else if ( ((ctr>ctrlast AND cpk>cpklast ) OR (ctr==ctrlast AND cpk>=cpklast) OR (ih[i]==cpk+rfac)) 
+			AND ctri>cpki AND gannline[i]>gannline[i-1])basetrend[i]=IIf(showauto,1,0);//(lastsig!=1 OR exitsigi>lastsigi) AND*/
+
+
+	
+	if (plotsrchart)
+	{
+		if (pkno!=pkcount){PlotText(WriteIf(cpk>cpklast,"HH",WriteIf(cpk==cpklast,"DT",WriteIf(cpk<cpklast,"LH",""))),pki[pkcount],gannline[pki[pkcount]]+rfac,ColorRGB(75,75,75));pkno=pkcount;}
+		if (trno!=trcount){PlotText(WriteIf(ctr>ctrlast,"HL",WriteIf(ctr==ctrlast,"DB",WriteIf(ctr<ctrlast,"LL",""))),tri[trcount],gannline[tri[trcount]]-rfac,ColorRGB(75,75,75));trno=trcount;}
+	}	
+}
+upbarc[i]=upbar;
+downbarc[i]=downbar;
+if (plotupdnbarc)
+{
+	If(downbar!=0)PlotText(WriteVal(downbar,1.),i,il[i]-3*rfac,colorOrange);
+	if(upbar!=0)PlotText(WriteVal(upbar,1.),i,iH[i]+3*rfac,colorgreen);
+}
+if (upbarc[i]==gannbars-1 AND I>0 AND upbarc[i]>upbarc[i-1]){upstarti=i;nextsigc[i]=1;nextsignal[i]=ah[upstarti]+rfac;}
+if (downbarc[i]==gannbars-1 AND I>0 AND downbarc[i]>downbarc[i-1]){downstarti=i;nextsigc[i]=-1;nextsignal[i]=al[downstarti]-rfac;}
+
+if (i>0 AND nextsigc[i]==0)
+{
+	nextsigc[i]=nextsigc[i-1];
+	if (upbar==0 AND downbar>0)nextsigc[i]=-1;
+	if (downbar==0 AND upbar>0)nextsigc[i]=1;
+}
+
+	
+if (nextsigc[i]==1 AND i>upstarti)nextsignal[i]=nextsignal[upstarti];
+else if (nextsigc[i]==-1 AND i>downstarti)nextsignal[i]=nextsignal[downstarti];
+
+pktrbar[i]=pktrcount;
+//if (gannline[i]==0)gannline[i]=Null;
+
+if (i==sbb[i])PlotText(Writeif(basetrend[i]==1,"UP",WriteIf(basetrend[i]==-2,"DN","")),i,H[i]+rfac1/2,ColorRGB(75,75,0));
+
+//Buy Sell signals
+	//
+	if (!IsNull(gannline[i]))
+	{
+		if(gannline[i]<gannline[i-1])ganntrend=-1;
+		else if (gannline[i]>gannline[i-1])ganntrend=1;	
+	}
+	jstore[i]=i;
+	Varname = Name()+chid+yr[i]+mth[i]+dtx[i]+Hr[i]+mn[i];
+	sig=StaticVarGet(Varname);
+	
+	if (IsNull(sig))sig1=0;
+	if (sig==5){PlotText("S-ON",i,H[i]+2*rfac,colorYellow);suppon=1;}
+	if (sig==-5){PlotText("S-OFF",i,H[i]+2*rfac,colorYellow);suppon=0;}
+	curdate=(yr[i]%100)*10000+mth[i]*100+dtx[i];
+	
+
+	upgap=IIf(hhl,ah[i]-f2H[i],ah[i]-f2l[i]);
+	downgap=IIf(hhl,f2L[i]-al[i],f2h[i]-al[i]);
+	
+	
+
+	if (i>1)
+	{
+		
+		ix=i;
+		/*if (f1[ix]>f2[ix] AND f1[ix-1]<=f2[ix-1]){f1f2cross=1;f2f1cross=0;f1f2compi=i;}
+		if (f1[ix]<f2[ix] AND f1[ix-1]>=f2[ix-1]){f2f1cross=1;f1f2cross=0;f2f1compi=i;}*/
+		if (hhl)
+		{
+			if (f1H[ix]>f2H[ix] AND f1H[ix-1]<=f2H[ix-1]){f1f2cross=1;f2f1cross=f2f1crossi=0;f1f2compi=i;}
+			if (f1L[ix]<f2L[ix] AND f1L[ix-1]>=f2L[ix-1]){f2f1cross=1;f1f2cross=f1f2crossi=0;f2f1compi=i;}
+		}
+		else 
+		if (!hhl)
+		{
+			if (f1H[ix]<f2H[ix] AND f1H[ix-1]>=f2H[ix-1]){f2f1cross=1;f1f2cross=f1f2crossi=0;f2f1compi=i;}
+			if (f1L[ix]>f2L[ix] AND f1L[ix-1]<=f2L[ix-1]){f1f2cross=1;f2f1cross=f2f1crossi=0;f1f2compi=i;}
+		}
+		
+
+		if (maadj AND madist==0)
+		{
+			if (f1f2cross AND i==f1f2compi+1)f1f2crossi=i;
+			if (f2f1cross AND i==f2f1compi+1)f2f1crossi=i;
+		
+		}
+		if (madist>0 AND !maadj)
+		{
+			//if (f1f2cross AND i>=f1f2compi AND f1[i]-f2[i]>=madist)f1f2crossi=i;
+			//if (f2f1cross AND i>=f2f1compi AND f2[i]-f1[i]>=madist)f2f1crossi=i;
+			if (f1f2cross AND i>=f1f2compi AND upgap>=madist AND f1f2crossi==0)f1f2crossi=i;
+			if (f2f1cross AND i>=f2f1compi AND downgap>=madist AND f2f1crossi==0)f2f1crossi=i;
+		}
+		if (madist>0 AND maadj)
+		{
+			//if (f1f2cross AND ((i>=f1f2compi AND f1[i]-f2[i]>=madist) OR (i>=f1f2compi+1 AND f1[i]-f2[i]>=madist)))f1f2crossi=i;
+			//if (f2f1cross AND ((i>=f2f1compi AND f2[i]-f1[i]>=madist) OR (i>=f2f1compi+1 AND f2[i]-f1[i]>=madist)))f2f1crossi=i;
+			if (f1f2cross AND ((i>=f1f2compi AND upgap>=madist) OR (i>=f1f2compi+1 AND upgap>=madist)))f1f2crossi=i;
+			if (f2f1cross AND ((i>=f2f1compi AND downgap>=madist) OR (i>=f2f1compi+1 AND downgap>=madist)))f2f1crossi=i;
+
+
+		}
+		if (madist==0 AND !maadj)
+		{
+			if (f1f2cross AND i==f1f2compi)f1f2crossi=i;
+			if (f2f1cross AND i==f2f1compi)f2f1crossi=i;
+		}
+
+		
+	}
+
+	
+			
+
+
+	igap=IIf(lastsig==1 AND hhl,f1l[i]-f2l[i],IIf(lastsig==-2 AND hhl,f1h[i]-f2h[i],IIf(lastsig==1 AND !hhl, f1h[i]-f2h[i],IIf(lastsig==-2,f1l[i]-f2l[i],0))));
+	forecasttype=forecastlong=forecastshort=0;
+	//if (f1f2cross)nshort=IIf(hhl,f2l[f2f1crossi]-madist,f2h[f2f1crossi]-madist);
+	//if (f2f1cross)nlong=IIf(hhl,f2h[f1f2crossi]+madist,f2l[f1f2crossi]+madist);
+
+	if (i>0)
+	{
+		if (f2f1cross)
+		{
+			nshort=IIf(hhl,f2l[f2f1crossi]-madist,f2h[f2f1crossi]-madist);
+			forecastlong=fsamebarl=IIf(hhl,IIf((f2f1cross AND f1h[i]<f2h[i]) OR !f1f2cross,(f2h[i-1]-f1h[i-1]*(1-fmafact))/fmafact,0),
+				IIf((f2f1cross AND f1l[i]<f2l[i]) OR !f1f2cross,(f2l[i-1]-f1l[i-1]*(1-fmafact))/fmafact,0));
+			fnextbarl=IIf(hhl,IIf((f2f1cross AND f1h[i]<f2h[i]) OR !f1f2cross,ih[i]+(f2h[i]-f1h[i])/fmafact,0),
+				IIf((f2f1cross AND f1l[i]<f2l[i]) OR !f1f2cross,ih[i]+(f2l[i]-f1l[i])/fmafact,0));
+				
+			longqual=ah[i]+rfac;
+			
+			if (fsamebarl>=longqual AND fnextbarl>=longqual)forecastlong=Min(fsamebarl,fnextbarl);
+			else if (fsamebarl>=longqual AND fnextbarl<longqual)forecastlong=fsamebarl;
+			else if (fnextbarl>=longqual AND fsamebarl<longqual)forecastlong=fnextbarl;
+			else forecastlong=longqual;
+			znextlong[i]=projlong=IIf(hhl,IIf(f1h[i]<f2h[i],forecastlong,0),IIf(f1l[i]<f2l[i],forecastlong,0));	
+		
+			if (i==sbb[i])PlotText("SB"+WriteVal(fsamebarl,1.2,0)+"/"+WriteVal(fsamebarl-xh[i]>rfac,1),i,iH[i]+10*gapx,colorWhite);	
+			if (i==sbb[i])PlotText("NB"+WriteVal(fnextbarl,1.2,0)+"/"+WriteVal(fnextbarl-xh[i]>rfac,1),i,iH[i]+8*gapx,colorWhite);	
+			if (i==sbb[i])PlotText("NL"+WriteVal(znextlong[i-1],1.2,0)+"/"+WriteVal(znextlong[i]-xh[i]>rfac,1),i,iH[i]+6*gapx,colorWhite);	
+			if (i==sbb[i])PlotText("XQ"+WriteVal(ah[i]+rfac,1.2,0)+"/"+WriteVal(forecastlong,1.2,0),i,iH[i]+4*gapx,colorWhite);		
+			//WriteVal(IIf(hhl,f2h[i],f2l[i]),1.2,0),i,iH[i]+2*gapx,colorWhite);		
+		}
+		else if (f1f2cross)
+		{
+			nlong=IIf(hhl,f2h[f1f2crossi]+madist,f2l[f1f2crossi]+madist);
+			fsamebars=IIf( hhl,IIf((f1f2cross AND f1l[i]>f2l[i]) OR !f2f1cross,(f2l[i-1]-f1l[i-1]*(1-fmafact))/fmafact,0),			
+					IIf((f1f2cross AND f1h[i]>f2h[i]) OR !f2f1cross,(f2h[i-1]-f1h[i-1]*(1-fmafact))/fmafact,0));	
+		
+
+			fnextbars=IIf( hhl,IIf((f1f2cross AND f1l[i]>f2l[i]) OR !f2f1cross,il[i]-(f1l[i]-f2l[i])/fmafact,0),			
+					IIf((f1f2cross AND f1h[i]>f2h[i]) OR !f2f1cross,il[i]-(f1h[i]-f2h[i])/fmafact,0));	
+
+			shortqual=al[i]-rfac;
+			if (fsamebars<=shortqual AND fnextbars<=shortqual)forecastshort=Max(fsamebars,fnextbars);
+			else if (fsamebars>=shortqual AND fnextbars<shortqual)forecastshort=fsamebars;
+			else if (fnextbars>=shortqual AND fsamebars<shortqual)forecastshort=fnextbars;
+			else forecastshort=shortqual;
+			znextshort[i]=projshort=IIf(hhl,IIf(f1l[i]>f2l[i],forecastshort,0),IIf(f1h[i]>f2h[i],forecastshort,0));
+			
+			if (i==sbb[i])PlotText("SB"+WriteVal(fsamebars,1.2,0)+"/"+WriteVal(xl[i]-fsamebars>rfac,1),i,iH[i]+10*gapx,colorWhite);	
+			if (i==sbb[i])PlotText("NB"+WriteVal(fnextbars,1.2,0)+"/"+WriteVal(xl[i]-fnextbars>rfac,1),i,iH[i]+8*gapx,colorWhite);	
+			if (i==sbb[i])PlotText("NS"+WriteVal(znextshort[i-1],1.2,0)+"/"+WriteVal(xl[i]-znextshort[i]>rfac,1),i,iH[i]+6*gapx,colorWhite);	
+			if (i==sbb[i])PlotText("XQ"+WriteVal(al[i]-rfac,1.2,0)+"/"+WriteVal(forecastshort,1.2,0),i,iH[i]+4*gapx,colorWhite);	
+			
+			//if (i==sbb[i])PlotText(WriteVal(fs,1.2,0),i,iH[i]+2*gapx,colorWhite);	
+		}
+		
+		
+		//znextshort[i]=projshort=IIf(f1l[i]>f2l[i] AND ganntrend==-1,forecastshort,0);
+		//znextlong[i]=projlong=IIf(f1h[i]<f2h[i] AND ganntrend==1,forecastlong,0);
+
+		znextshort[i]=projshort=IIf(hhl,IIf(f1l[i]>f2l[i],forecastshort,0),IIf(f1h[i]>f2h[i],forecastshort,0));
+		znextlong[i]=projlong=IIf(hhl,IIf(f1h[i]<f2h[i],forecastlong,0),IIf(f1l[i]<f2l[i],forecastlong,0));
+
+		if (projected)
+		{
+			if (znextlong[i-1]>0)nlong=znextlong[i-1];
+			if (znextshort[i-1]>0)nshort=znextshort[i-1];
+		}
+		//if (i==sbb[i])PlotText("XQ"+WriteVal(xl[i]-rfac,1.2,0)+"/"+WriteVal(nshort,1.2,0),i,iH[i]+2*gapx,colorWhite);	
+		//if (i==sbb[i])PlotText(WriteVal(f2f1cross,1.2),i,iH[i]+rfac,colorWhite);	
+		znextlongsl[i]=IIf (znextlong[i]!=0,znextlong[i]-(ctr-rfac),0);
+		znextshortsl[i]=IIf (znextshort[i]!=0,cpk+rfac-znextshort[i],0);
+		znextlongslval[i]=IIf (znextlong[i]!=0,znextlong[i]-(ctr-rfac),0);
+		znextshortsl[i]=IIf (znextshort[i]!=0,cpk+rfac-znextshort[i],0);
+	}
+	
+	//project highs and lows for next cross over
+	
+
+	if (showauto AND !suppon AND tn[i]!=091500 AND  (useautorange==0 OR (useautorange==1 AND curdate>=autodatestart AND curdate<=autodateend)))
+	{
+		activebuy=lastsig==1 AND lastsigi>exiti;
+		reentry=1;
+
+		if (trademode=="SR-Swing")
+		{	
+			if (cpk<cpklast AND al[i]<=ctr-rfac AND cpki>ctri AND ganntrend==-1 )basetrend[i]=sig=
+				IIf(skipshort,IIf((activebuy AND al[i]<=sl[i-1] AND onskipexitatsl) or (activebuy AND !onskipexitatsl),-1,0),-2);//(lastsig!=-1 OR exitsigi>lastsigi)check=-2; AND 
+			else if (ctr>ctrlast AND ah[i]>=cpk+rfac  AND ctri>cpki AND ganntrend==1)basetrend[i]=sig=1;//(lastsig!=1 OR exitsigi>lastsigi) AND
+		}
+		if (trademode=="SR-Break")
+		{	
+			if (al[i]<=ctr-rfac AND ganntrend==-1)basetrend[i]=sig=
+				IIf(skipshort,IIf((activebuy AND al[i]<=sl[i-1] AND onskipexitatsl) or (activebuy AND !onskipexitatsl),-1,0),-2);//(lastsig!=-1 OR exitsigi>lastsigi)check=-2; AND 
+			else if (ah[i]>=cpk+rfac AND ganntrend==1)basetrend[i]=sig=1;//(lastsig!=1 OR exitsigi>lastsigi) AND
+		}
+		if (trademode=="MA-Cross")
+		{	
+			if (f2f1cross AND (i-f2f1crossi<=crosslim OR (reentry AND i-f1f2crossi>crosslim AND lastsig==-1 AND exitintraday)) AND ganntrend==-1 AND il[i]<=nshort)basetrend[i]=sig=
+				IIf(skipshort,IIf((activebuy AND al[i]<=sl[i-1] AND onskipexitatsl) or (activebuy AND !onskipexitatsl),-1,0),-2);//(lastsig!=-1 OR exitsigi>lastsigi)check=-2; AND 
+			else if (f1f2cross AND (i-f1f2crossi<=crosslim OR (reentry AND i-f1f2crossi>crosslim AND lastsig==1 AND exitintraday)) AND ganntrend==1 AND ih[i]>=nlong)basetrend[i]=sig=1;//(lastsig!=1 OR exitsigi>lastsigi) AND
+		}
+		else if (trademode=="Retrace")
+		{	
+			if (cpk<cpklast AND cpki>ctri AND gannline[i]<gannline[i-1])basetrend[i]=sig=IIf(skipshort,IIf((activebuy AND al[i]<=sl[i-1] AND onskipexitatsl) or (activebuy AND !onskipexitatsl),-1,0),-2);//(lastsig!=-1 OR exitsigi>lastsigi)check=-2; AND 
+			else if (ctr>ctrlast AND ctri>cpki AND gannline[i]>gannline[i-1])basetrend[i]=sig=1;//(lastsig!=1 OR exitsigi>lastsigi) AND
+		}
+		else if (trademode=="MA-Retrace")
+		{	
+			if (cpk<cpklast AND cpki>ctri AND gannline[i]<gannline[i-1] AND f2f1cross AND i-f2f1crossi<=crosslim)basetrend[i]=IIf(skipshort,IIf((activebuy AND al[i]<=sl[i-1] AND onskipexitatsl) or (activebuy AND !onskipexitatsl),-1,0),-2);//(lastsig!=-1 OR exitsigi>lastsigi)check=-2; AND 
+			else if (ctr>ctrlast AND ctri>cpki AND gannline[i]>gannline[i-1] AND f1f2cross AND i-f1f2crossi<=crosslim)basetrend[i]=sig=1;//(lastsig!=1 OR exitsigi>lastsigi) AND
+		}
+		else if (trademode=="MA-SR")
+		{	
+			if (cpk<cpklast AND al[i]<=ctr-rfac AND cpki>ctri AND ganntrend==-1 AND f2f1cross AND i-f2f1crossi<=crosslim)basetrend[i]=IIf(skipshort,IIf((activebuy AND al[i]<=sl[i-1] AND onskipexitatsl) or (activebuy AND !onskipexitatsl),-1,0),-2);//(lastsig!=-1 OR exitsigi>lastsigi)check=-2; AND 
+			else if (ctr>ctrlast AND ah[i]>=cpk+rfac  AND ctri>cpki AND ganntrend==1 AND f1f2cross AND i-f1f2crossi<=crosslim)basetrend[i]=sig=1;//(lastsig!=1 OR exitsigi>lastsigi) AND
+		}
+
+
+	}	
+	//if (i==sbb[i])PlotText(WriteVal(sig,1.2),i,High[i]+rfac,colorWhite);	
+	
+	
+	if (i>0 AND basetrend[i]==0)basetrend[i]=basetrend[i-1];
+	
+	if (i>0 AND basetrend[i]!=basetrend[i-1])sig=basetrend[i];
+	if (sig==1 AND lastsig==1 AND exiti<lastsigi)sig=0;
+	if ((sig==-2 AND lastsig==-2 AND exiti<lastsigi))sig=0;
+	if (sig==-2 AND skipshort)sig=0;
+	
+
+	
+	if ((useautorange AND curdate>autodateend) or (exitintraday AND hrmn[i]>=1530))//exits trades at end of date range
+	{
+		if (lastsigi>exiti)
+		{
+			if (lastsig==1)sig=-1;
+			if (lastsig==-2)sig=2;
+		}
+	}
+	/*if (lastsigi>exiti AND tn[i]==153000)//Intraday test
+	{
+		if (lastsig==1)sig=-1;
+		if (lastsig==-2)sig=2;
+	}*/
+
+	
+	//if(i==sbb[i])PlotText(WriteVal(tn[i],1.0),i,H[i]+2*tr[i],colorWhite);
+	
+	if (i>0)tradect[i]=tradect[i-1];
+	if (sig==1){
+		if (trademode=="SR-Swing" OR trademode=="SR-Break"){BuyPrice[i]=IIf(al[i]>=cpk+rfac,al[i],cpk+rfac);tradetypex[i]=Buy[i]=1;}
+		else if (trademode=="Retrace"){BuyPrice[i]=IIf(al[i]>=nextsignal[i],al[i],nextsignal[i]);tradetypex[i]=Buy[i]=1;}
+		else if (trademode=="MA-SR"){BuyPrice[i]=IIf(al[i]>=cpk+rfac,al[i],cpk+rfac);tradetypex[i]=Buy[i]=1;}
+//		else if (trademode=="MA-Retrace" OR trademode=="MA-Cross"){BuyPrice[i]=IIf(al[i]>=nextsignal[i],al[i],nextsignal[i]);tradetypex[i]=Buy[i]=1;}
+		else if (trademode=="MA-Retrace" OR trademode=="MA-Cross"){BuyPrice[i]=IIf(al[i]>=nlong,al[i],nlong);tradetypex[i]=Buy[i]=1;}
+
+		if (Buy[i]==1)
+		{
+			tradeprice[i]=BuyPrice[i];
+			prevsig=lastsig;
+			lastsig=sig;profit[i]=IIf(sigi>exiti AND BuyPrice[sigi]!=0,ShortPrice[sigi]-BuyPrice[i],0);prevsigi=lastsigi;lastsigi=sigi=i;sig=0;
+			sl[i]=tr[trcount]-slmult*rfac;slpoints[i]=BuyPrice[i]-sl[i];
+			tradect[i]=tradect[i]+1;
+			threshflag=threshcross=threshcrossi=threshflagi=0;
+		}
+		}
+	else if ((sig==-1 AND Lastsig==1) ){Sell[i]=1;exitprice[i]=SellPrice[i]=al[i];exiti=i;profit[i]=SellPrice[i]-BuyPrice[sigi];exitsig=-1;sig=0;}
+	else if (sig==-2 AND !skipshort){
+		if (trademode=="SR-Swing" OR trademode=="SR-Break"){ShortPrice[i]=IIf(ah[i]<=ctr-rfac,ah[i],ctr-rfac);tradetypex[i]=-1;Short[i]=1;}
+		else if (trademode=="Retrace"){ShortPrice[i]=nextsignal[i];tradetypex[i]=-1;Short[i]=1;}
+		else if (trademode=="MA-SR" AND al[i]<=ctr-rfac){ShortPrice[i]=IIf(ah[i]<=ctr-rfac,ah[i],ctr-rfac);tradetypex[i]=-1;Short[i]=1;}
+//		else if (trademode=="MA-Retrace" OR trademode=="MA-Cross"){ShortPrice[i]=IIf(ah[i]<nextsignal[i],ah[i],nextsignal[i]);tradetypex[i]=-1;Short[i]=1;}
+		else if (trademode=="MA-Retrace" OR trademode=="MA-Cross"){ShortPrice[i]=IIf(ah[i]<nshort,ah[i],nshort);tradetypex[i]=-1;Short[i]=1;}
+		if (Short[i]==1)
+		{
+			tradeprice[i]=ShortPrice[i];
+			prevsig=lastsig;
+			lastsig=sig;profit[i]=IIf(sigi>exiti AND Lastsigi!=0,ShortPrice[i]-BuyPrice[sigi],0);prevsigi=lastsigi;lastsigi=sigi=i;sig=0;
+			sl[i]=pk[pkcount]+slmult*rfac;slpoints[i]=sl[i]-ShortPrice[i];
+			tradect[i]=tradect[i]+1;
+			threshflag=threshcross=threshcrossi=threshflagi=0;
+		}
+		}
+	else if (sig==2 AND Lastsig==-2){Cover[i]=1;exitprice[i]=CoverPrice=ah[i];exiti=i;profit[i]=ShortPrice[sigi]-CoverPrice[i];exitsig=2;}
+	
+	
+	
+	if (targetmode)target=slpoints[sigi]*targetratio;
+	
+	
+	systemtarget[i]=target;
+	systemtarget2[i]=target*target2ratio;
+	if (lastsig==1)targetlevel=systemtargetlevel[i]=BuyPrice[sigi]+target;
+	else if (lastsig==-2)systemtargetlevel[i]=shortPrice[sigi]-target;
+	if (i>lastsigi AND lastsigi>exiti)
+	{
+		slmaxprofit=tslfac*maxprofit[i-1];
+		sl[i]=IIf(lastsig==1,sl[sigi]+slmaxprofit,sl[sigi]-slmaxprofit);slpoints[i]=slpoints[sigi]-slmaxprofit;
+		tradetypex[i]=tradetypex[i-1];tradeprice[i]=tradeprice[i-1];
+		if (lastsig==1 AND il[i]<=sl[i] AND ih[i]>=sl[i] AND tn[i]!=091500){exit=1;exiti=i;exitprice[i]=sellPrice[i]=sl[i];Sell[i]=1;}
+		else if (lastsig==1 AND il[i]<sl[i] AND ih[i]<sl[i] AND tn[i]!=091500){exit=1;exiti=i;exitprice[i]=sellPrice[i]=ih[i];Sell[i]=1;}
+		else if(lastsig==1) exitprice[i]=ah[i];
+		if (lastsig==-2 AND ih[i]>=sl[i] AND il[i]<=sl[i] AND tn[i]!=091500){exit=1;exiti=i;exitprice[i]=CoverPrice[i]=sl[i];Cover[i]=1;}
+		else if (lastsig==-2 AND ih[i]>sl[i] AND il[i]>sl[i] AND tn[i]!=091500){exit=1;exiti=i;exitprice[i]=CoverPrice[i]=il[i];Cover[i]=1;}
+		else if(lastsig==-2)exitprice[i]=al[i];
+		
+	}
+	
+	
+	//if (i==sbb[i])PlotText(WriteVal(exitprice[i],1.2),i,High[i]+2*rfac,colorWhite);	
+	
+
+	//if (cpk<cpklast AND cpki>ctri AND ah[i]>=ctr-rfac AND al[i]<=ctr-rfac AND gannline[i]<gannline[i-1])PlotText(WriteVal(-2,1.0),i,H[i]+2*tr[i],colorWhite);
+	//if (ctr>ctrlast AND ah[i]>=cpk+rfac AND aL[i]<=cpk+rfac AND ctri>cpki AND gannline[i]>gannline[i-1])PlotText(WriteVal(1,1.0),i,H[i]+2*tr[i],colorWhite);
+	//if (i>0 AND basetrend[i]!=basetrend[i-1])PlotText(WriteVal(basetrend[i],1.0),i,H[i]+2*tr[i],colorWhite);
+	//if(i==sbb[i])PlotText(WriteVal(basetrend[i],1.0),i,H[i]+2*tr[i],colorWhite);
+	xxx=0;
+	if (i>0)
+	{
+		
+		if (lastsigi==i)
+		{
+			if (prevsig!=0 AND prevsigi>exiti)
+			{
+
+				if (threshtog)threshold=slpoints[prevsigi]+threshpoints;
+				if (usethreshratio)threshold=slpoints[prevsigi]*threshratio;
+				
+				if (prevsig==1)exitprofitprev[i]=Max(shortprice[i],sl[i-1])-BuyPrice[prevsigi];
+				else if(prevsig==-2)exitprofitprev[i]=ShortPrice[prevsigi]-buyprice[i];
+				maxprofitprev[i]=Max(maxprofit[i-1],exitprofitprev[i]);
+				minprofitprev[i]=Min(minprofit[i-1],exitprofitprev[i]);
+				
+				prevtarget=target;
+				prevtarget2=target2ratio*target;
+				if (targetmode){prevtarget=slpoints[prevsigi]*targetratio;prevtarget2=prevtarget*target2ratio;}
+				
+				
+				
+				if (maxprofitprev[i]>=prevtarget)targetprofitprev[i]=prevtarget;
+				else targetprofitprev[i]=exitprofitprev[i];
+				if (maxprofitprev[i]>=prevtarget2)target2profitprev[i]=prevtarget2;
+				else target2profitprev[i]=exitprofitprev[i];
+				if (threshtog AND maxprofitprev[i]>=threshold){threshflag=1;threshflagi=i;}
+				//else threshflag=0;
+				if (threshflag==1 AND i>threshflagi AND exitprofitprev[i]<=slpoints[prevsigi]){threshcross=1;threshcrossi=i;}
+				if (threshcross==0)threshprofitprev[i]=exitprofitprev[i];
+				if (threshcross OR (i>prevsigi AND threshstatus[i-1]==1))threshprofitprev[i]=slpoints[prevsigi];
+				threshflag=threshcross=threshflagi=threshcrossi=0;
+				//if (i==sbb[i])PlotText(WriteVal(threshprofitprev[i],1.2),i,iH[i]+10*rfac,colorWhite);
+			}
+			if (threshtog)threshold=slpoints[lastsigi]+threshpoints;
+			if (usethreshratio)threshold=slpoints[lastsigi]*threshratio;
+			
+			if (lastsig==1){maxprofit[i]=ih[i]-Min(buyprice[i],sl[i-1]);minprofit[i]=0;
+				exitprofit[i]=ah[i]-BuyPrice[i];maxprice[i]=ih[i];minprice[i]=BuyPrice[i];}
+			else if (lastsig==-2){maxprofit[i]=shortprice[i]-il[i];minprofit[i]=0;
+				exitprofit[i]=ShortPrice[i]-al[i];maxprice[i]=il[i];minprice[i]=ShortPrice[i];}
+			if (maxprofit[i]>=target)targetprofit[i]=target;
+			else targetprofit[i]=exitprofit[i];
+			if (maxprofit[i]>=target*target2ratio)target2profit[i]=target*target2ratio;
+			else target2profit[i]=exitprofit[i];
+			
+			barprofit=IIf(lastsigi>exiti,IIf(lastsig==1,al[i]-BuyPrice[lastsigi],ShortPrice[lastsigi]-ah[i]),exitprofit[i]);
+			if (threshtog AND maxprofit[i]>=threshold AND threshflag==0){threshflag=1;threshflagi=i;}
+			//else threshflag=0;
+			if (threshflag==1 AND i>threshflagi AND barprofit<=slpoints[lastsigi] and
+				IIf(lastsig==1,ah[i]>=BuyPrice[lastsigi]+target,al[i]<=ShortPrice[lastsigi]-target)){threshcross=1;threshcrossi=i;}
+			if (threshcross==0)threshprofit[i]=exitprofit[i];
+			
+			threshprice=IIf(lastsig==1,BuyPrice[lastsigi]+threshold,ShortPrice[lastsigi]-threshold);
+			
+			sigxi=IIf(exiti>prevsigi,exiti,prevsigi);
+			
+			cume[i]=cumexitprofit[i]=cumexitprofit[prevsigi]-exitprofit[prevsigi]+IIf(exiti>prevsigi,exitprofit[exiti],exitprofitprev[i])+exitprofit[i];
+			dispcumexitprofit[i]=dispcumexitprofit[prevsigi]+IIf(exiti>prevsigi,exitprofit[exiti],exitprofitprev[i]);
+			
+			ctprofit=IIf(exiti>prevsigi,exitprofit[exiti],exitprofitprev[i]);
+			cumlosse[i]=cumlosse[prevsigi]+IIf(ctprofit-brok<0,ctprofit,0);
+			cumgaine[i]=cumgaine[prevsigi]+IIf(ctprofit-brok>=0,ctprofit,0);
+			successe[i]=successe[prevsigi]+IIf(ctprofit-brok>=0 AND prevsigi>0,1,0);
+								
+			cumt[i]=cumtargetprofit[i]=cumtargetprofit[prevsigi]-targetprofit[prevsigi]+IIf(exiti>prevsigi,targetprofit[exiti],targetprofitprev[i])+targetprofit[i];
+			dispcumtargetprofit[i]=dispcumtargetprofit[prevsigi]+IIf(exiti>prevsigi,targetprofit[exiti],targetprofitprev[i]);
+			
+			ctprofit=IIf(exiti>prevsigi,targetprofit[exiti],targetprofitprev[i]);
+			cumlosst[i]=cumlosst[prevsigi]+IIf(ctprofit-brok<0,ctprofit,0);
+			cumgaint[i]=cumgaint[prevsigi]+IIf(ctprofit-brok>=0,ctprofit,0);
+			successt[i]=successt[prevsigi]+IIf(ctprofit-brok>=0 AND prevsigi>0,1,0);
+			
+			cumt2[i]=cumtarget2profit[i]=cumtarget2profit[prevsigi]-target2profit[prevsigi]+IIf(exiti>prevsigi,target2profit[exiti],target2profitprev[i])+target2profit[i];
+			dispcumtarget2profit[i]=dispcumtarget2profit[prevsigi]+IIf(exiti>prevsigi,target2profit[exiti],target2profitprev[i]);
+			
+			
+			ctprofit=IIf(exiti>prevsigi,target2profit[exiti],target2profitprev[i]);
+			cumlosst2[i]=cumlosst2[prevsigi]+IIf(ctprofit-brok<0,ctprofit,0);
+			cumgaint2[i]=cumgaint2[prevsigi]+IIf(ctprofit-brok>=0,ctprofit,0);
+			successt2[i]=successt2[prevsigi]+IIf(ctprofit-brok>=0 AND prevsigi>0,1,0);
+			
+			cumr[i]=cumthreshprofit[i]=cumthreshprofit[prevsigi]-threshprofit[prevsigi]+IIf(exiti>prevsigi,threshprofit[exiti],threshprofitprev[i])+threshprofit[i];
+			dispcumthreshprofit[i]=dispcumthreshprofit[prevsigi]+IIf(exiti>prevsigi,threshprofit[exiti],threshprofitprev[i]);
+			
+			ctprofit=IIf(exiti>prevsigi,threshprofit[exiti],threshprofitprev[i]);
+			cumlossr[i]=cumlossr[prevsigi]+IIf(ctprofit-brok<0,ctprofit,0);
+			cumgainr[i]=cumgainr[prevsigi]+IIf(ctprofit-brok>=0,ctprofit,0);
+			successr[i]=successr[prevsigi]+IIf(ctprofit-brok>=0 AND prevsigi>0,1,0);
+			
+		}
+		else if (i>lastsigi AND (lastsigi>exiti OR i==exiti))
+		
+		{
+		
+			
+			if (threshtog)threshold=slpoints[lastsigi]+threshpoints;
+			if (usethreshratio)threshold=slpoints[lastsigi]*threshratio;		
+			if (maxprice[i]==0 AND i>lastsigi)maxprice[i]=maxprice[i-1];
+			if (minprice[i]==0 AND i>lastsigi)minprice[i]=minprice[i-1];
+			if (lastsig==1){maxprofit[i]=Max(exitprice[i]-buyprice[lastsigi],maxprofit[i-1]);
+				minprofit[i]=Min(exitprice[i]-BuyPrice[lastsigi],minprofit[i-1]);if (ih[i]>maxprice[i])maxprice[i]=ih[i];}
+			else if (lastsig==-2){maxprofit[i]=Max(shortprice[lastsigi]-exitprice[i],maxprofit[i-1]);
+				minprofit[i]=min(ShortPrice[lastsigi]-exitprice[i],minprofit[i-1]);if (il[i]<minprice[i])minprice[i]=il[i];}
+		
+			exitprofit[i]=IIf(lastsig==1,exitprice[i]-BuyPrice[lastsigi],IIf(lastsig==-2,ShortPrice[lastsigi]-exitprice[i],exitprofit[i-1]));
+			if (maxprofit[i]>=target)targetprofit[i]=target;
+			else targetprofit[i]=exitprofit[i];
+			if (maxprofit[i]>=target*target2ratio)target2profit[i]=target*target2ratio;
+			else target2profit[i]=exitprofit[i];
+			
+			barprofit=IIf(lastsigi>exiti,IIf(lastsig==1,al[i]-BuyPrice[lastsigi],ShortPrice[lastsigi]-ah[i]),exitprofit[i]);
+			
+			if (threshtog AND maxprofit[i]>=threshold AND threshflag==0){threshflag=1;threshflagi=i;}
+			//else threshflag=0;
+			if (threshflag AND i>threshflagi AND barprofit<=slpoints[lastsigi] AND 
+				IIf(lastsig==1,ah[i]>=BuyPrice[lastsigi]+target,al[i]<=ShortPrice[lastsigi]-target)){threshcross=1;threshcrossi=i;}
+			if (threshcross==0)threshprofit[i]=exitprofit[i];
+			if (threshcross==1){threshprofit[i]=slpoints[lastsigi];threshstatus[i]=1;}
+			
+			//if (i==sbb[i])PlotText(WriteVal(threshcross,1.2),i,iH[i]+10*rfac,colorWhite);
+			cume[i]=cumexitprofit[i]=cumexitprofit[lastsigi]-exitprofit[lastsigi]+exitprofit[IIf(exiti>lastsigi,exiti,i)];
+			dispcumexitprofit[i]=dispcumexitprofit[lastsigi]+exitprofit[IIf(exiti>lastsigi,exiti,i)];
+			
+			sigxi=IIf(lastsigi>exiti OR i==exiti,lastsigi,IIf(exiti>lastsigi,exiti,i));
+			
+			cumlosse[i]=cumlosse[lastsigi]+IIf(exitprofit[i]-brok<0,exitprofit[i],0);
+			cumgaine[i]=cumgaine[lastsigi]+IIf(exitprofit[i]-brok>=0,exitprofit[i],0);
+			successe[i]=successe[lastsigi]+IIf(exitprofit[i]-brok>=0 AND i==exiti,1,0);
+			
+			cumt[i]=cumtargetprofit[i]=cumtargetprofit[lastsigi]-targetprofit[lastsigi]+targetprofit[IIf(exiti>lastsigi,exiti,i)];
+			dispcumtargetprofit[i]=dispcumtargetprofit[lastsigi]+targetprofit[i]; 
+			
+			cumlosst[i]=cumlosst[lastsigi]+IIf(targetprofit[i]-brok<0,targetprofit[i],0);
+			cumgaint[i]=cumgaint[lastsigi]+IIf(targetprofit[i]-brok>=0,targetprofit[i],0);		
+			successt[i]=successt[lastsigi]+IIf(targetprofit[i]-brok>=0 AND i==exiti,1,0);
+			
+			cumt2[i]=cumtarget2profit[i]=cumtarget2profit[lastsigi]-target2profit[lastsigi]+target2profit[IIf(exiti>lastsigi,exiti,i)];
+			dispcumtarget2profit[i]=dispcumtarget2profit[lastsigi]+target2profit[i]; 
+
+			cumlosst2[i]=cumlosst2[sigxi]+IIf(target2profit[i]-brok<0,target2profit[i],0);
+			cumgaint2[i]=cumgaint2[sigxi]+IIf(target2profit[i]-brok>=0,target2profit[i],0);
+			successt2[i]=successt2[lastsigi]+IIf(target2profit[i]-brok>=0 AND i==exiti,1,0);
+			
+			
+			
+			cumr[i]=cumthreshprofit[i]=cumthreshprofit[lastsigi]-threshprofit[lastsigi]+threshprofit[IIf(exiti>lastsigi,exiti,i)];
+			dispcumthreshprofit[i]=dispcumthreshprofit[lastsigi]+threshprofit[i]; 
+			
+			cumlossr[i]=cumlossr[lastsigi]+IIf(threshprofit[i]-brok<0,threshprofit[i],0);
+			cumgainr[i]=cumgainr[lastsigi]+IIf(threshprofit[i]-brok>=0,threshprofit[i],0);
+			successr[i]=successr[lastsigi]+IIf(threshprofit[i]-brok>=0 AND i==exiti,1,0);
+			
+		
+		}
+		
+		if (i>exiti AND exiti>lastsigi)
+		{
+			cume[i]=cumexitprofit[i]=cumexitprofit[exiti];
+			cumt[i]=cumtargetprofit[i]=cumtargetprofit[exiti];
+			cumt2[i]=cumtarget2profit[i]=cumtarget2profit[exiti];
+			cumr[i]=cumthreshprofit[i]=cumthreshprofit[exiti];
+			exitprofit[i]=exitprofit[exiti];
+			targetprofit[i]=targetprofit[exiti];		
+			target2profit[i]=target2profit[exiti];
+			threshprofit[i]=threshprofit[exiti];
+			dispcumexitprofit[i]=dispcumexitprofit[exiti];
+			dispcumtargetprofit[i]=dispcumtargetprofit[exiti];		
+			dispcumtarget2profit[i]=dispcumtarget2profit[exiti];
+			dispcumthreshprofit[i]=dispcumthreshprofit[exiti];
+			cumlosse[i]=cumlosse[exiti];
+			cumgaine[i]=cumgaine[exiti];
+			cumlosst[i]=cumlosst[exiti];
+			cumgaint[i]=cumgaint[exiti];
+			cumlosst2[i]=cumlosst2[exiti];
+			cumgaint2[i]=cumgaint2[exiti];
+			cumlossr[i]=cumlossr[exiti];
+			cumgainr[i]=cumgainr[exiti];
+			successe[i]=successe[exiti];
+			successr[i]=successr[exiti];
+			successt[i]=successt[exiti];
+			successt2[i]=successt2[exiti];
+		}		
+	}		
+	targetachieved[i]=IIf(maxprofit[i]>systemtarget[i] AND lastsigi>exiti,1,0);
+	target2achieved[i]=IIf(maxprofit[i]>systemtarget2[i] AND lastsigi>exiti,1,0);
+			 
+	
+	if (lastsig==1 AND lastsigi>exiti AND threshcross==0)
+	{
+		plotthreshold[i]=BuyPrice[lastsigi]+threshold;
+		plottarget1[i]=systemtargetlevel[i];
+	}
+	else if (lastsig==-2 AND lastsigi>exiti  AND threshcross==0)
+	{
+		plotthreshold[i]=shortPrice[lastsigi]-threshold;
+		plottarget1[i]=systemtargetlevel[i];
+	}
+	
+	
+	
+	xxx=sl[i];
+	//xxx=exitprofit[i];
+	 
+	
+
+	//if (profit[i]!=0)PlotText(WriteVal(profit[i],1.0),i,iH[i]+tr[i],colorWhite);
+	if (showprice)
+	{
+		if (lastsigi==i AND ( (lastsig==1 AND (BuyPrice[i]>ah[i] OR BuyPrice[i]<al[i])) OR (lastsig==-2 AND (shortPrice[i]>ah[i] OR shortPrice[i]<al[i])) 
+			OR (lastsig==1 AND pki[pkcount]>tri[trcount]) OR (lastsig==2 AND pki[pkcount]<tri[trcount]) ))
+			PlotText(WriteIf(lastsig==1,WriteVal(BuyPrice[i],1.2,0),writeIf(lastsig==-2,WriteVal(ShortPrice[i],1.2,0),""))+"\nInvalid Signal",i,IIf(lastsig==1,il[i]-rfac,ih[i]+rfac),colororange);
+		else
+		if (i==lastsigi)PlotText(WriteIf(lastsig==1,WriteVal(BuyPrice[i],1.2,0),writeIf(lastsig==-2,WriteVal(ShortPrice[i],1.2,0),""))+"/"+WriteVal(slpoints[i],1,0)+
+			WriteIf(exiti<prevsigi,"\n"+WriteVal(exitprofitprev[i],1,0)+"/"+WriteVal(threshprofitprev[i],1,0)+"/"+WriteVal(targetprofitprev[i],1,0)+"/"+WriteVal(target2profitprev[i],1,0)+"\n"+WriteVal(maxprofitprev[i],1,0)+"/"+WriteVal(minprofitprev[i],1,0),""),i,IIf(lastsig==1,il[i]-rfac,ih[i]+rfac),colorWhite);
+		if (i==exiti)PlotText(WriteVal(exitprice[i],1.2,0)+"\n"+WriteVal(exitprofit[i],1,0)+"/"+WriteVal(threshprofit[i],1,0)+"/"+WriteVal(targetprofit[i],1,0)+"/"+WriteVal(target2profit[i],1,0)+"\n"+WriteVal(maxprofit[i],1,0)+"/"+WriteVal(minprofit[i],1,0),i,IIf(lastsig==1,ih[i]+rfac,il[i]-rfac),colorWhite);
+	}
+	if (bardb[i]==1)PlotText(WriteVal(dtx[i],1),i,ih[i],colorWhite);
+//Buy sell end
+
+}
+}
+indx=ind;znextdb=znextdt=k=0;
+//Kagi graph
+for (ind=indx-kagibarc;ind<=pktrcount+rclin;ind++)
+	{
+		//if (i>BarCount-1 OR zi>BarCount-1)break;
+		if ((ind>2 AND rclose[ind]>rclose[ind-1] AND rclose[ind]>rclose[ind-2] AND Checklevel==0) OR 
+				(ind>2 AND rclose[ind]<rclose[ind-1] AND rclose[ind]<rclose[ind-2] AND Checklevel==0))	Checklevel=rclose[ind-2];
+
+		
+		if (zi>=BarCount-1)break;
+		//zcheck[zi]=checklevel;
+		if (ind>1 AND rclose[ind]>rclose[ind-1] )//implies this is a peak
+		{
+
+			zi=zi+1;
+			zclose[zi]=zhigh[zi]=rclose[ind];
+			zopen[zi]=zlow[zi]=rclose[ind-1];
+			zmid[zi]=(zclose[zi]+zopen[zi])/2;
+			kagicolor[zi]=1;
+			zdate[zi]=rdt[ind];
+			zmonth[zi]=rmth[ind];
+			zyr[zi]=ryr[ind];
+			zpkno[zi]=ind;
+			kstore[zi]=zi;
+			zhr[zi]=rhr[ind];
+			zmin[zi]=rMin[ind];
+			zvol[zi]=rvol[ind];
+			zdtarray[zi]=xdr[ind];
+			zmaxh[zi]=IIf(IsNull(zmaxh[zi]),maxh[ind],Max(maxh[ind],zmaxh[zi]));
+			zminl[zi]=IIf(IsNull(zminl[zi]),minl[ind],Min(minl[ind],zminl[zi]));
+			kstore[zi]=zi;
+			zminend[zi]=rminend[ind];
+			zdayopen[zi]=rdayopen[ind];
+			zdayclose[zi]=rdayclose[ind];
+			zdaych1[zi]=rdaych1[ind];
+			zdaycl1[zi]=rdaycl1[ind];
+			zdaych2[zi]=rdaych2[ind];
+			zdaycl2[zi]=rdaycl2[ind];
+			zdtend[zi]=rdtend[ind];
+			zfibhigh[zi]=fibhigh[ind];
+			zfiblow[zi]=fiblow[ind];
+			zdbtime[zi]=dbtime[ind];
+			zdttime[zi]=dttime[ind];
+			//zcheck[zi]=checklevel;
+			if (kagicam)
+			{
+				zr1[zi]=rr1[ind];
+				zr2[zi]=rr2[ind];
+				zs1[zi]=rs1[ind];
+				zs2[zi]=rs2[ind];
+			}
+			//zpiv[zi]=rpiv[ind];
+//Ying yang logic 
+			//zcheck[zi]=checklevel;
+			//if (ind>2 AND rclose[ind]>rclose[ind-2] AND rclose[ind-2]>rclose[ind-1])
+			if (ind>2 AND rclose[ind]>rclose[ind-2] AND rclose[ind-2]>rclose[ind-1])
+			{
+				vClose[zi]=vHigh[zi]=rclose[ind];
+				Vopen[zi]=Vlow[zi]=rclose[ind-2];
+				wClose[zi]=wHigh[zi]=rclose[ind-2];
+				wOpen[zi]=wLow[zi]=rclose[ind-1];
+				array=1;
+				if (Vhigh[zi]>=Checklevel)Vcolor[zi]=1;
+				else if (Vhigh[zi]<Checklevel)Vcolor[zi]=-1;
+
+				if (wlow[zi]<Checklevel)wcolor[zi]=-1;
+				else if (wlow[zi]>=Checklevel)wcolor[zi]=1;
+			}
+			else if (ind>3 AND rclose[ind-1]>=rclose[ind-3]) 
+			{
+				vclose[zi]=vHigh[zi]=rclose[ind];
+				vOpen[zi]=vlow[zi]=rclose[ind-1];
+				array=2;
+				if (Vhigh[zi]>Checklevel)Vcolor[zi]=1;
+				else if (Vhigh[zi]<=Checklevel)Vcolor[zi]=-1;
+			}
+			else if (ind>3 AND rclose[ind-1]<rclose[ind-3]) 
+			{
+				vclose[zi]=vHigh[zi]=rclose[ind];
+				vOpen[zi]=vlow[zi]=rclose[ind-1];
+				array=3;
+				if (Vhigh[zi]>Checklevel)Vcolor[zi]=1;
+				else if (Vhigh[zi]<=Checklevel)Vcolor[zi]=-1;
+			}
+		}
+
+		else if (ind>1 AND rclose[ind]<rclose[ind-1] )//implies this is a trough
+		{
+			zi=zi+1;
+			zclose[zi]=zlow[zi]=rclose[ind];
+			zopen[zi]=zhigh[zi]=rclose[ind-1];	
+			zmid[zi]=(zclose[zi]+zopen[zi])/2;
+			zdate[zi]=rdt[ind];
+			zmonth[zi]=rmth[ind];
+			zyr[zi]=ryr[ind];
+			zpkno[zi]=ind;
+			kagicolor[zi]=-1;
+			kstore[zi]=zi;
+			zhr[zi]=rhr[ind];
+			zmin[zi]=rMin[ind];
+			zvol[zi]=rvol[ind];
+			zdtarray[zi]=xdr[ind];
+			zmaxh[zi]=IIf(IsNull(zmaxh[zi]),maxh[ind],Max(maxh[ind],zmaxh[zi]));
+			zminl[zi]=IIf(IsNull(zminl[zi]),minl[ind],Min(minl[ind],zminl[zi]));
+			kstore[zi]=zi;
+			zminend[zi]=rminend[ind];
+			zdayopen[zi]=rdayopen[ind];
+			zdaych1[zi]=rdaych1[ind];
+			zdaycl1[zi]=rdaycl1[ind];
+			zdaych2[zi]=rdaych2[ind];
+			zdaycl2[zi]=rdaycl2[ind];
+			zdayclose[zi]=rdayclose[ind];
+			zdtend[zi]=rdtend[ind];
+			zfibhigh[zi]=fibhigh[ind];
+			zfiblow[zi]=fiblow[ind];
+			zdbtime[zi]=dbtime[ind];
+			zdttime[zi]=dttime[ind];
+			//zcheck[zi]=checklevel;
+			if (kagicam)
+			{
+				zr1[zi]=rr1[ind];
+				zr2[zi]=rr2[ind];
+				zs1[zi]=rs1[ind];
+				zs2[zi]=rs2[ind];
+			}
+			//zpiv[zi]=rpiv[ind];
+			if (ind>2 AND rclose[ind]<rclose[ind-2] AND rclose[ind-2]<rclose[ind-1])
+			{
+				vopen[zi]=vHigh[zi]=rclose[ind-1];
+				Vclose[zi]=Vlow[zi]=rclose[ind-2];
+				wopen[zi]=wHigh[zi]=rclose[ind-2];
+				wclose[zi]=wLow[zi]=rclose[ind];
+				array=4;
+				if (Vhigh[zi]>Checklevel)Vcolor[zi]=1;
+				else if (Vhigh[zi]<Checklevel)Vcolor[zi]=-1;
+
+				if (wlow[zi]<=Checklevel)wcolor[zi]=-1;
+				else if (wlow[zi]>Checklevel)wcolor[zi]=1;
+
+			}
+			else if (rclose[ind]>=rclose[ind-2])
+			{
+				vclose[zi]=vlow[zi]=rclose[ind];
+				vOpen[zi]=vhigh[zi]=rclose[ind-1];
+				array=5;
+				if (Vhigh[zi]>Checklevel)Vcolor[zi]=1;
+				else if (Vhigh[zi]<Checklevel)Vcolor[zi]=-1;
+
+			}
+		}
+		if (zi>0)Vcheck[zi]=array;
+		if (lastind!=ind)
+		{
+		for (k=zi+1;k<=zi+zispace;k++)//adds the blank space 
+		{
+			if (k<=BarCount-1)
+			{
+				zclose[k]=zhigh[k]=zopen[k]=zlow[k]=rclose[ind];zdate[k]=zdate[zi];zmonth[k]=zmonth[zi];zyr[k]=zyr[zi];zpkno[k]=zpkno[zi];kstore[k]=k;zhr[k]=zhr[zi];zmin[k]=zmin[zi];
+					if (array==1 OR array==3 OR array==5 OR array==2)vClose[k]=vHigh[k]=vopen[k]=vlow[k]=vClose[zi];Vcolor[k]=Vcolor[zi];
+				if (array==4 OR array==5)wClose[k]=wHigh[k]=wOpen[k]=wLow[k]=wClose[zi];wcolor[k]=wcolor[zi];zmid[k]=Null;
+				kagicolor[k]=kagicolor[zi];zvol[k]=zvol[zi];zdtarray[k]=zdtarray[zi];zmaxh[k]=zmaxh[zi];zminl[k]=zmin[zi];kstore[k]=k;zminend[k]=kminend[zi];
+				if (kagicam){zr1[k]=zr1[zi];zr2[k]=zr2[zi];zs1[k]=zs1[zi];zs2[k]=zs2[zi];}
+				zpiv[k]=zpiv[zi];zfibhigh[k]=zfibhigh[zi];zfiblow[k]=zfiblow[zi];zdbtime[k]=zdbtime[zi];zdttime[k]=zdttime[zi];
+			}
+			else break;
+		}
+		}
+		zi=k-1;
+		if (zi>=1)
+		{
+			reversalchosen=IIf(fixedr=="Fixed",fixedrev,IIf(fixedr=="Variable",(kagiperc/100*zhigh[zi]),brick*pnfrev));
+			if (zhigh[zi]-zlow[zi]>reversalchosen)
+			{
+				mclose[zi]=zhigh[zi]-reversalchosen;
+				nclose[zi]=zlow[zi]+-reversalchosen;
+			}
+		}
+		if (ind>2 AND rclose[ind]>rclose[ind-1] AND Checklevel>rclose[ind-1] AND Checklevel<rclose[ind])	Checklevel=rclose[ind-1];
+		if 	(ind>2 AND rclose[ind]<rclose[ind-1] AND Checklevel>rclose[ind] AND Checklevel<rclose[ind-1])	Checklevel=rclose[ind-1];
+		if (ind>2 AND rclose[ind]>rclose[ind-1] AND Checklevel>rclose[ind])	Checklevel=rclose[ind];
+		if 	(ind>2 AND rclose[ind]<rclose[ind-1] AND Checklevel<rclose[ind])	Checklevel=rclose[ind]; 
+
+		lastind=ind;
+		if (zi>2)
+		{
+			znextdt[zi]=iif(((zopen[zi]<zclose[zi] AND zhigh[zi]<=zhigh[zi-1]) OR (zopen[zi]>zclose[zi] AND zhigh[zi]==zhigh[zi-1]))
+				AND znextdt[zi]==0,zhigh[zi-1]+rfac,0);
+			znextdb[zi]=iif(((zopen[zi]>zclose[zi] AND zlow[zi]>=zlow[zi-1]) OR (zopen[zi]<zclose[zi] AND zlow[zi]==zlow[zi-1]))
+				AND znextdb[zi]==0,zlow[zi-1]-rfac,0);
+			
+		}	
+	}
+	
+
+	delta=BarCount-zi-1+zispace-kagioffset;
+	zopen=Ref(zopen,-delta);
+	zhigh=Ref(zhigh,-delta);
+	zlow=Ref(zlow,-delta);
+	zclose=Ref(zclose,-delta);
+	zmid=Ref(zmid,-delta);
+
+	zyr=Ref(zyr,-delta);
+	zmonth=Ref(zmonth,-delta);
+	zdate=Ref(zdate,-delta);
+	zpkno=Ref(zpkno,-delta);
+	zhr=Ref(zhr,-delta);
+	zmin=Ref(zmin,-delta);
+	zvol=Ref(zvol,-delta);
+	zdtarray=Ref(zdtarray,-delta);
+	zmaxh=Ref(zmaxh,-delta);
+	zminl=Ref(zminl,-delta);
+	mclose=Ref(mclose,-delta);
+	nclose=Ref(nclose,-delta);
+	zminend=Ref(zminend,-delta);
+	zdayopen=Ref(zdayopen,-delta);
+	zdayclose=Ref(zdayclose,-delta);
+	zdtend=Ref(zdtend,-delta);
+	zdaych1=Ref(zdaych1,-delta);
+	zdaycl1=Ref(zdaycl1,-delta);
+	zdaych2=Ref(zdaych2,-delta);
+	zdaycl2=Ref(zdaycl2,-delta);
+	kagicolor=Ref(kagicolor,-delta);
+	vclose=Ref(vclose,-delta);
+	vopen=Ref(vopen,-delta);
+	vhigh=Ref(vhigh,-delta);
+	vlow=Ref(vlow,-delta);
+	wclose=Ref(wClose,-delta);
+	wopen=Ref(wopen,-delta);
+	whigh=Ref(whigh,-delta);
+	wlow=Ref(wlow,-delta);
+
+	zdbtime=Ref(zdbtime,-delta);
+	zdttime=Ref(zdttime,-delta);
+	znextdt=Ref(znextdt,-delta);
+	znextdb=Ref(znextdb,-delta);
+	Vcolor=Ref(Vcolor,-delta);
+	wcolor=Ref(wcolor,-delta);
+	
+	kstore=Ref(kstore,-delta);
+
+	Vcheck=Ref(Vcheck,-delta);
+	
+	if (kagicam)
+	{
+		zr1=Ref(zr1,-delta);
+		zr2=Ref(zr2,-delta);
+		zs1=Ref(zs1,-delta);
+		zs2=Ref(zs2,-delta);
+	}
+	
+	
+	zcheck=Ref(zcheck,-delta);
+
+Lastl=Lasth=lastl1=lasth1=lastc=lasto=kr=0;ks=0;
+kagir1=kagir2=kagis1=kagis2=Null;
+sbb=SelectedValue(BarIndex());
+sbj=SelectedValue(jstore);
+sbk=SelectedValue(kstore);
+if (showkagima)
+{
+	zma=(zhigh+zlow)/2;
+	
+	//zma=zclose;
+	zmaf=IIf(Kagimatf=="MA",MA(zma,kagimaf),IIf(kagimatf=="EMA",EMA(zma,kagimaf),IIf(kagimatf=="WMA",WMA(zma,kagimaf),Null)));
+	zmas=IIf(Kagimats=="MA",MA(zma,kagimas),IIf(kagimats=="EMA",EMA(zma,kagimas),IIf(kagimats=="WMA",WMA(zma,kagimas),Null)));
+}
+
+
+//Kagi graph end
+
+
+_SECTION_END();
+
+if (plotsrchart)
+{
+	//SAR lines
+
+	lastbaro=lastbarc=lastbarh=lastbarl=Null;
+
+	avxf1=EMA(avin,avperiod1);
+	avxf2=EMA(avin,avperiod2);
+	avx=WMA(avin,avperiod3);
+	//GraphZOrder=1;
+	Plot(iC,"close",IIf(BarIndex()==BarCount-1,colorYellow,IIf(ohlccolor,IIf(io<=ic,colorGreen,colorRed),ColorRGB(50,50,50))),styleBar); 
+	
+	if (showthreshold)
+	{
+		Plot(plotthreshold,"",coloryellow,styleDashed);
+		Plot(plottarget1,"",colorGreen,styleDashed);
+	}
+	if (Plotg)
+	{
+	//	gannline=IIf(gannline>0,gannline,Null);
+		Plot(gannline,"Trendline",ganncolor,styleLine);
+	}
+	if (PlotSR)
+	{
+
+		/*Plot(avxf1,"",Coloryellow,styleLine|stylenolabel);
+		Plot(avxf2,"",colorred,styleLine|stylenolabel);
+		Plot(avx,"",colorGreen,styleLine|stylenolabel);*/
+
+		//Plot(f1,"",Coloryellow,styleLine|stylenolabel);
+		//Plot(f2,"",colorred,styleLine|stylenolabel);
+		
+		Plot(f1h,"",Coloryellow,styleLine|stylenolabel);
+		Plot(f2H,"",colorGreen,styleLine|stylenolabel);
+
+
+		Plot(f1L,"",ColorOrange,styleLine|stylenolabel);
+		Plot(f2L,"",colorred,styleLine|stylenolabel);
+
+		
+		Plot(fx,"",colorGreen,styleLine|stylenolabel);
+
+		//PlotOHLC (ah,ah,al,al,"ohlc",colorRed,styleBar); 
+		cavx=SelectedValue(avx);
+
+
+	}
+	if (plotsrbars)
+	{
+		PlotOHLC (ah,ah,ah,ah,"ohlc",colorGreen,styleBar); 
+		PlotOHLC (al,al,al,al,"ohlc",colorRed,styleBar); 
+	}
+	//Plot(EMA((ah+al)/2,3),"",colorGreen,styleLine);
+
+
+
+	Graph0=ic;
+	shapen=Buy*shapeUpArrow+Short*shapeDownArrow;
+	shapex=Sell*shapeHollowDownArrow+Cover*shapeHollowUpArrow;
+	PlotShapes(shapen,IIf(Buy,colorWhite,colorOrange),Graph0,offset=IIf(Buy,iL,iH));
+	PlotShapes(shapex,colorYellow,Graph0,IIf(Cover,iL,iH));
+	Plot(sl,"",colorPink,styledashed);
+	if (showcam!="None" OR showorb!="None")
+	{
+		PlotOHLC (mLine1,mLine1,mLine1,mLine1,"",ParamColor("Line 1 color",colorGreen),styleBar);
+		PlotOHLC (mLine2,mLine2,mLine2,mLine2,"",ParamColor("Line 2 color",colorLime),styleBar);
+		PlotOHLC (mLine3,mLine3,mLine3,mLine3,"",ParamColor("Line 3 color",colorOrange),styleBar);
+		PlotOHLC (mLine4,mLine4,mLine4,mLine4,"",ParamColor("Line 4 color",colorRed),styleBar);
+		PlotOHLC (mLine5,mLine5,mLine5,mLine5,"",ParamColor("Line 5 color",colorSkyblue),styleBar);
+		if (showcam!="None")
+		{
+			
+			PlotText(WriteVal(mline1[BarCount-1],1.2),BarCount,mline1[BarCount-1],colorGreen);
+			PlotText(WriteVal(mline2[BarCount-1],1.2),BarCount,mline2[BarCount-1],colorlime);
+			PlotText(WriteVal(mline3[BarCount-1],1.2),BarCount,mline3[BarCount-1],colororange);
+			PlotText(WriteVal(mline4[BarCount-1],1.2),BarCount,mline4[BarCount-1],colorred);
+		}
+	}
+
+	if (fillerbar)
+	{
+		for (i=1;i<=srn;i++)
+		{
+			PlotOHLC(VarGet("sr"+i),VarGet("sr"+i),VarGet("sr"+i),VarGet("sr"+i),"",colorOrange,styleBar,styleNoTitle|styleNoLabel);
+		}
+	}
+
+	//indicator test start
+	volup=voldn=Null;
+	if (showvol)
+	{
+		average = Param("Band average", 8, 1 );
+		Volperiod = Param("VolPeriod", 13, 1 );
+		devfactor = Param("Devfactor", 3.55, 0, 10, 0.01 );
+		Lowbandadjust = Param("Low band adj.", 0.9, 0, 5, 0.01 );
+
+		Typical = ( ah+al+IIf(C>O,ah,al))/3;
+
+		AdjTyp = IIf( Typical > Ref( Typical, -1 ),
+					  Typical - Ref( al, -1 ),
+					  Ref( Typical, -1 ) - al );
+
+		Deviation = Sum( AdjTyp , VolPeriod )/ VolPeriod * devfactor;
+
+		DevHigh = EMA( deviation, average );
+		DevLow = EMA( deviation, average ) * Lowbandadjust;
+
+		Medianaverage = EMA( Typical, average );
+		volup=EMA( Medianaverage, average ) + DevHigh;
+		voldn=EMA( Medianaverage, average ) - DevLow;
+		Plot( volup, "Upper", colorViolet);
+		Plot( voldn , "Lower", colorViolet );
+		Plot( MA( Medianaverage, average ), "Median", colorBlue );
+	}
+}
+
+//Indicator test end
+Color4=ColorBlend(colorBlack,4,mmLum);
+Color5=ColorBlend(colorBlack,5,mmLum);
+Color6=ColorBlend(colorBlack,6,mmLum);
+Color7=ColorBlend(colorBlack,7,mmLum);
+
+//donedeal=0;
+if (showsr AND (plotsrchart OR plotkagichart))
+//if (donedeal)
+{
+	if (SelectedValue(pktrbar)-srarrayindex>=0 AND showsr)//srarray index is count of pks and trs to look backward.
+	{
+		srstarti=pktri[SelectedValue(pktrbar)];	
+		//PlotText("SR Start"+WriteVal(srarrayindex,1.),srstarti,il[srstarti]-3*brick,coloryellow); //Optional display
+		maxsr=minsr=0;
+		for (mm=0;mm<srarrayindex;mm++)
+		{
+			//srarray[mm]=pktr[pktrcount-srarraylookback-mm];
+			srarray[mm]=pktr[SelectedValue(pktrbar)-mm];
+			maxsr=IIf(maxsr==0,srarray[mm],Max(maxsr,srarray[mm]));
+			minsr=IIf(minsr==0,srarray[mm],Min(minsr,srarray[mm]));
+			
+			//Plottext(WriteVal(unit,1.),BarCount,ih[BarCount-1]+10*i,colorYellow);
+		}
+		midsr=(maxsr+minsr)/2;
+		if (showpktrfib)
+		{
+			Plot (maxsr,"",ColorRGB(0,175,175),styleLine|styleNoLabel);
+			Plot (minsr,"",ColorRGB(0,175,175),styleLine|styleNoLabel);
+			diff=maxsr-minsr;
+			Plot (minsr+0.236*diff,"",ColorRGB(0,100,100),styleLine|styleNoLabel);
+			Plot (minsr+0.764*diff,"",ColorRGB(0,100,100),styleLine|styleNoLabel);
+			Plot (minsr+0.382*diff,"",ColorRGB(75,0,0),styleLine|styleNoLabel);
+			Plot (minsr+0.618*diff,"",ColorRGB(0,75,0),styleLine|styleNoLabel);
+			Plot(midsr,"",ColorRGB(175,175,175),styleLine|styleNoTitle);
+		}
+		else 
+		{
+			if (srmid)
+			{
+				Plot(midsr,"",ColorRGB(175,175,175),styleLine|styleNoTitle);
+				//Plottext(WriteVal(midsr,1.),SelectedValue(BarIndex()),ih[SelectedValue(BarIndex())]+2*brick,colorYellow);
+			}
+			srupcount=srdncount=0;
+			for (mm=0;mm<srarrayindex;mm++)
+			{
+				unit=(250-250/(srarrayindex+1)*(mm+1))*.9;
+				Plot(srarray[mm],"",ColorRGB(0,unit,unit),styleLine|styleNoTitle);
+				if(srarray[mm]>midsr)srupcount=srupcount+1;
+				else if(srarray[mm]<midsr)srdncount=srdncount+1;
+			}
+			if (srmid)Plottext(WriteVal(srupcount,1.)+"/"+WriteVal(srdncount,1.),SelectedValue(BarIndex()),ih[SelectedValue(BarIndex())]+2*brick,ColorRGB(75,75,75));
+		}
+	}
+}
+
+kagilinetype=kagithick=1;
+if (kagilinetype==1 AND plotkagichart)
+{
+	if (kagithick)
+	{
+		V1o=V1h=V1l=V1c=w1O=w1H=w1L=w1C=Null;
+		V1o=IIf(Vcolor==1,Vopen,Null);
+		V1h=IIf(Vcolor==1,Vhigh,Null);
+		V1l=IIf(Vcolor==1,Vlow,Null);
+		V1c=IIf(Vcolor==1,Vclose,Null);
+		w1O=IIf(wcolor==1,wOpen,Null);
+		w1H=IIf(wcolor==1,wHigh,Null);
+		w1L=IIf(wcolor==1,wLow,Null);
+		w1C=IIf(wcolor==1,wClose,Null);
+		PlotOHLC(v1O,v1h,v1L,v1C,"",IIf(vcolor==1,colorGreen,colorRed),128+4);
+		PlotOHLC(w1O,w1H,w1L,w1C,"",IIf(vcolor==1,colorGreen,colorRed),128+4);
+	}
+
+	PlotOHLC(vOpen,vHigh,vLow,vClose,"",IIf(vcolor==1,colorGreen,colorRed),styleBar|stylenolabel);
+	PlotOHLC(wOpen,wHigh,wLow,wClose,"",IIf(wcolor==1,colorGreen,colorRed),styleBar|stylenolabel);
+	if (showmid)PlotOHLC(zmid,zmid,zmid,zmid,"",ColorRGB(100,100,100),styleBar);
+
+	/*if (kagirev=="Gap" OR kagirev=="Yes")
+	{
+		PlotOHLC(mclose,mclose,mclose,mclose,"",ColorRGB(50,100,100),styleBar);
+		PlotOHLC(nClose,nClose,nClose,nClose,"",ColorRGB(50,100,100),styleBar);
+	}*/
+	//istart=1;
+	//if (BarCount-1-kagibarc>0)i=BarCount-1-kagibarc;
+	for (i=1;i<=BarCount-1;i++)
+	{
+		//PlotText(WriteVal(zdate[i],1.0,0),i,zhigh[i],colorWhite);
+		if(zdate[i]!=zdate[i-1] AND i>0)PlotText(WriteVal(zdate[i],1.0,0),i,zhigh[i],colorWhite); 
+	}
+
+}
+
+
+
+if(!plotkagichart OR showganntitle)Title =StrFormat("{{NAME}} - {{INTERVAL}} {{DATE}} - Custom Signals : Open ")+WriteVal(iO,1.2,0)+EncodeColor(colorGreen)+" Hi "+WriteVal(iH,1.2,0)+EncodeColor(colorOrange)+" Lo "+WriteVal(iL,1.2,0)+EncodeColor(colorYellow)+" Close "+WriteVal(iC,1.2,0)
++EncodeColor(colorGreen)+" S/R "+ al+"/"+EncodeColor(colorOrange)+ah+EncodeColor(colorPink)+" S/R Gap "+ rfac +WriteIf(showvol,EncodeColor(colorwhite)+EncodeColor(colorPink),"")+" Set to "+sname+
+WriteIf(tradetypex!=0,"\n"+Trademode+" Last "+WriteIf(tradetypex==1,"LONG ","SHORT ")+WriteVal(tradeprice,1.2,0)+" Stoploss/Points "+WriteVal(sl,1.2,0)+"/"+WriteVal(slpoints,1.,0)
++" System Target Level "+WriteVal(systemtargetlevel,1.2,0)+"/"+WriteVal(systemtarget,1.2,0)+WriteIf(targetachieved,Encodecolor(colorLime)+" Target Achieved",EncodeColor(colorOrange)+" Target Not Achieved")+EncodeColor(colorpink)+
+" /T2/ "+WriteVal(systemtarget2,1.2,0)+WriteIf(target2achieved,Encodecolor(colorLime)+" Target2 Achieved",EncodeColor(colorOrange)+" Target2 Not Achieved")+EncodeColor(colorpink),"")+
+"\nMaxprofit "+WriteVal(maxprofit,1.0,0)+" Min Profit "+WriteVal(minprofit,1.0,0)+" Exit Profit "+
+WriteVal(exitprofit,1.0,0)+" Threshold Profit "+WriteVal(threshprofit,1.0,0)+" Target1 Profit "+WriteVal(targetprofit,1.0,0)+" Target2 Profit "+WriteVal(target2profit,1.0,0)
++"\nCum profit "+WriteVal(cumexitprofit,1.0,0)+" Cum Threshold profit "+WriteVal(cumthreshprofit,1.0,0)+" Cum Target1 profit "+WriteVal(cumtargetprofit,1.0,0)
++" Cum Target2 profit "+WriteVal(cumtarget2profit,1.0,0)
++" in "+WriteVal(tradect,1,0)+" trades. Data Start " +WriteVal(stdate,1)+WriteIf(stmonth<10,"-0","-")+WriteVal(stmonth,1)+"-"+WriteVal(styear,1,0)+
+	
+"\n"+writeif(showcam!="None"," Val above/below Cam "+WriteVal(v1,1.)+"/"+WriteVal(v2,1.),"")+
+WriteIf(nextsigc==1,EncodeColor(colorGreen),WriteIf(nextsigc==-1,
+	EncodeColor(colorOrange),EncodeColor(colorWhite)))+
+	writeif((upbarc==gannbars-1 AND nextsigc==1) OR (downbarc==gannbars-1 AND nextsigc==-1), 
+	"Reversal is at the next bar with level =  "+WriteVal(nextsignal,1.2),"")
++WriteIf(nextsigc==1,EncodeColor(colorlime)+" Upbar count "+WriteVal(upbarc,1.0),"")+
+WriteIf(nextsigc==-1,EncodeColor(colororange)+" Downbar count "+WriteVal(downbarc,1.0),"");
+
+else
+Title=StrFormat("{{NAME}} - {{INTERVAL}} - Kagi ")+WriteVal(zdate,1)+","+StrExtract("Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec",SelectedValue(zmonth)-1)+" "+WriteVal(zyr,1,0)+" "+timecon(zhr*100+zmin)+" "+
+	StrFormat(WriteIf(zopen<zclose,EncodeColor(colorGreen)+"Close(H)",EncodeColor(colorRed)+"Close(L)")+" %0.2f "+WriteIf(zopen<zclose,EncodeColor(colorRed)+"Open(L) ",EncodeColor(colorgreen)+"Open(H) ")+ "%0.2f",zclose,zopen)+EncodeColor(colorGreen)+" Max Hi "+WriteVal(zmaxh,1.2,0)+EncodeColor(colorred)+" Min Lo "+WriteVal(zminl,1.2,0)+
+	WriteIf(znextdt>0,EncodeColor(colorLime)+" Next DT "+WriteVal(znextdt,1.2,0),"")+WriteIf(znextdb>0,EncodeColor(colororange)+" Next DB "+WriteVal(znextdb,1.2,0),"");
+
+Varname = Name()+chid+selyr+selmth+seldtx+selhr+selmn;
+
+if( setbuy )
+ {
+   StaticVarSet( Varname, 1 );
+ } 
+ 
+if( setsell )
+ {
+   StaticVarSet( Varname, -1 );
+ } 
+ 
+if( setshort )
+ {
+   StaticVarSet( Varname, -2 );
+ } 
+ 
+
+if( setcover )
+ {
+   StaticVarSet( Varname, 2 );
+ }
+ 
+ if (suppresson)
+ {
+	StaticVarSet(varname,5);
+ }
+ if (suppressoff)
+ {
+	StaticVarSet(varname,-5);
+ }
+
+
+if( sethigh )
+ {
+   StaticVarSet( Varname, 10 );
+ } 
+if( setlow )
+ {
+   StaticVarSet( Varname, -10 );
+ } 
+
+if( clear )
+ {
+   StaticVarRemove( Varname );
+ } 
+
+
+if (Clearall)
+{
+	for (i=1;i<BarCount;i++)
+	{
+		Varname = Name()+chid+yr[i]+mth[i]+dtx[i]+hr[i]+mn[i];
+		StaticVarRemove(Varname);
+	}
+}
+if (writeall)
+{
+	mydir="C:\\OHLC-NEW\\";
+
+	fh=fopen(mydir+Name()+"rawbars.txt","w");
+	ds="";
+
+	if (fh)
+	{
+	for (i=0;i<BarCount;i++)
+	{
+
+	ds=Name()+","+WriteVal(int(Datey[i]/10000)+1900,1,0)+WriteIf(Datey[i]%1000<1000,"0","")+WriteVal(Datey[i]%1000,1,0)+","+WriteIf(tn[i]<100000,"0","")+WriteVal(tn[i],1.,0)+",";
+	fputs(ds,fh);
+	ds=StrFormat("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n",O[i],H[i],L[i],C[i],ah[i],al[i]);
+	fputs(ds,fh);
+	if (i==BarCount-1)fclose(fh);
+	}
+
+	}
+}
+
+if (printall)
+{
+	//mydir="C:\\OHLC-NEW\\";
+	fh=fopen("srpar.txt","r");
+	if (fh)
+	{
+		lread=fgets(fh);
+		mydir=StrTrim(StrExtract(lread,1,'='),"");
+		PlotText(mydir,BarCount-1,H[BarCount-1],colorYellow); 
+		fclose(fh);
+	}
+	else PlotText("Parameter File Not found",BarCount-10,H[BarCount-1],colorYellow);
+
+	fh=fopen(mydir+Name()+"tradescsv.txt","w");
+
+	if (fh)
+	{
+		ds="Name,Date,Time,Type,TradePrice,SL-Points,Maxprofit,Minprofit,Exit Profit,Thresh Profit,Target Profit,Target2 Profit,CumExit Profit,CumThresh Profit,CumTarget Profit,CumTarget2 Profit\n";
+		fputs(ds,fh);lpass=0;exiti=lastsigi=prevsigi=0;
+		for (i=0;i<BarCount;i++)
+		{
+			if (Cover[i]){exiti=i;exit=-2;}
+			if (sell[i]){exiti=i;exit=2;}	
+
+			if ((Buy[i]==1 OR Short[i]==1 ) )
+			{
+			
+				if (lastsigi>0 AND lastsigi>exiti)
+				{
+					ds=WriteVal(maxprofitprev[i],1.2,0)+","+WriteVal(minprofitprev[i],1.2,0)+","+WriteVal(exitprofitprev[i],1.2,0)+","+
+						WriteVal(threshprofitprev[i],1.2,0)+","+WriteVal(targetprofitprev[i],1.2,0)+","+WriteVal(target2profitprev[i],1.2,0)+","
+						+WriteVal(dispcumexitprofit[i],1.2,0)+","+WriteVal(dispcumthreshprofit[i],1.2,0)+","+
+						WriteVal(dispcumtargetprofit[i],1.2,0)+","+WriteVal(dispcumtarget2profit[i],1.2,0)+"\n";
+					fputs(ds,fh);
+				}
+
+			
+			
+				if (Buy[i] ){prevsig=lastsig;prevsigi=lastsigi;lastsig=1;lastsigi=i;}
+				if (short[i] ){prevsig=lastsig;prevsigi=lastsigi;lastsig=-1;lastsigi=i;}
+				
+				ds=Name()+","+WriteVal(int(Datey[i]/10000)+1900,1,0)+WriteIf(Datey[i]%10000<1000,"0","")+WriteVal(Datey[i]%10000,1,0)+","+timecon(int(tn[i]/100))+","
+					+WriteIf(lastsig==1,"Buy,"+WriteVal(BuyPrice[i],1.2,0)+",",WriteIf(lastsig==-1,"Short,"+WriteVal(ShortPrice[i],1.2,0)+",",""))
+					+WriteVal(slpoints[i],1.2,0)+",";
+				fputs(ds,fh);
+			}
+				
+			if ((exiti!=i AND prevsigi>exiti AND prevsigi>lastsigi) OR (lastsigi!=i AND exiti==i AND exiti>lastsigi AND lastsigi>0 AND exiti>0))
+			{
+				ds=WriteVal(maxprofit[i],1.2,0)+","+WriteVal(minprofit[i],1.2,0)+","+WriteVal(exitprofit[i],1.2,0)+","+
+					WriteVal(threshprofit[i],1.2,0)+","+WriteVal(targetprofit[i],1.2,0)+","+WriteVal(target2profit[i],1.2,0)+","
+					+WriteVal(dispcumexitprofit[i],1.2,0)+","+WriteVal(dispcumthreshprofit[i],1.2,0)+","+
+					WriteVal(dispcumtargetprofit[i],1.2,0)+","+WriteVal(dispcumtarget2profit[i],1.2,0)+"\n";
+				fputs(ds,fh);
+			}
+
+
+
+
+				
+				
+				
+			
+			
+			
+			if (i==BarCount-1)
+			{
+				if (lastsigi>exiti)
+				{
+					//ds=WriteVal(maxprofit[i],1.2,0)+","+WriteVal(minprofit[i],1.2,0)+","+WriteVal(exitprofit[i],1.2,0)+","+WriteVal(targetprofit[i],1.2,0)+","+WriteVal(dispcumexitprofit[i],1.2,0)+","+WriteVal(dispcumtargetprofit[i],1.2,0)+"\n";
+					ds=WriteVal(maxprofit[i],1.2,0)+","+WriteVal(minprofit[i],1.2,0)+","+WriteVal(exitprofit[i],1.2,0)+","+
+					WriteVal(threshprofit[i],1.2,0)+","+WriteVal(targetprofit[i],1.2,0)+","+WriteVal(target2profit[i],1.2,0)+","
+					+WriteVal(dispcumexitprofit[i],1.2,0)+","+WriteVal(dispcumthreshprofit[i],1.2,0)+","+
+					WriteVal(dispcumtargetprofit[i],1.2,0)+","+WriteVal(dispcumtarget2profit[i],1.2,0)+"\n";
+					fputs(ds,fh);
+				}
+				if (tradect[i]>0)
+				{
+
+					ds="\nTrade Count,,,,,,,,"+WriteVal(tradect[i],1);
+					fputs(ds,fh);
+				
+					ds="\nSuccess Count and %age,,,,,,,,"+WriteVal(successe[i],1)+","+WriteVal(successr[i],1)+","+WriteVal(successt[i],1)+","+WriteVal(successt2[i],1)+","+
+						WriteVal(successe[i]/tradect[i]*100,1)+","+WriteVal(successr[i]/tradect[i]*100,1)+","+WriteVal(successt[i]/tradect[i]*100,1)+","+WriteVal(successt2[i]/tradect[i]*100,1);
+					fputs(ds,fh);
+					ds="\nGain Value and %age,,,,,,,,"+WriteVal(cumgaine[i],1,0)+","+WriteVal(cumgainr[i],1,0)+","+WriteVal(cumgaint[i],1,0)+","+WriteVal(cumgaint2[i],1,0)+","+
+						WriteVal(cumgaine[i]/(cumgaine[i]+abs(cumlosse[i]))*100,1)+","+WriteVal(cumgainr[i]/(cumgainr[i]+abs(cumlossr[i]))*100,1)+","+
+						WriteVal(cumgaint[i]/(cumgaint[i]+abs(cumlosst[i]))*100,1)+","+WriteVal(cumgaint2[i]/(cumgaint2[i]+abs(cumlosst2[i]))*100,1);
+					fputs(ds,fh);
+					ds="\nLoss Value,,,,,,,,"+WriteVal(cumlosse[i],1,0)+","+WriteVal(cumlossr[i],1,0)+","+WriteVal(cumlosst[i],1,0)+","+WriteVal(cumlosst2[i],1,0);
+					fputs(ds,fh);
+					ds="\nNet Value(Profit),,,,,,,,"+WriteVal(cumgaine[i]+cumlosse[i],1,0)+","+WriteVal(cumgainr[i]+cumlossr[i],1,0)+","+WriteVal(cumgaint[i]+cumlosst[i],1,0)+","+WriteVal(cumgaint2[i]+cumlosst2[i],1,0);
+					fputs(ds,fh);
+					
+				}
+				ds="\n\nSystem Date Start "+WriteVal(stdate,1)+WriteIf(stmonth<10,"-0","-")+WriteVal(stmonth,1)+"-"+WriteVal(styear,1,0);		
+				fputs(ds,fh);
+				ds="\nS/R Gap = "+WriteVal(rfac,1,0)+"\n";
+				fputs(ds,fh);
+				ds="Auto Trading = "+WriteIf(useautorange,"On\n","Off\n");
+				fputs(ds,fh);
+				ds="Trade Method = "+Writeif(trademode=="Retrace","Retracement",WriteIf(trademode=="SR-Swing","SR Swing",
+					Writeif(trademode=="MA-SR","Moving Average with SR break",Writeif(trademode=="MA-Retrace","Moving Average with Retracement",
+					Writeif(trademode=="MA-Cross","Moving Average Crossover",trademode)))))+"\n";
+				fputs(ds,fh);
+				ds="Chart Time Interval in Seconds = "+WriteVal(Interval(0),1,0)+"\n";
+				fputs(ds,fh);
+				ds="Date Range Used = "+Writeif(useautorange,WriteVal(autodatestart,1,0)+" to "+WriteVal(autodateend,1,0),"No")+"\n";
+				fputs(ds,fh);
+				ds=WriteIf(targetmode,"Target 1 Ratio = ","Absolute target =  ")+Writeif(targetmode,WriteVal(targetratio,1.1,0)+":1",WriteVal(target,1.2,0))+"\n";
+				fputs(ds,fh);
+				ds="Target 2 Ratio = "+WriteVal(target2ratio,1.1,0)+"\n";
+				fputs(ds,fh);
+				ds=WriteIf(usethreshratio," Threshold Ratio "+Writeval(threshratio,1.1),"Threshold points "+WriteVal(threshpoints,1,0))+"\n";
+				fputs(ds,fh);
+				ds="Stop loss multiplier = "+WriteVal(slmult,1.1,0)+"\n";
+				fputs(ds,fh);
+				ds="Trailing Stop Ratio = "+WriteVal(tslfac,1.1,0)+"\n";
+				fputs(ds,fh);
+
+
+				
+				fclose(fh);
+			}
+			
+			//if (i==BarCount-1)fclose(fh);
+		}
+	}
+}
+
+if (Writetrades)
+{
+	fh=fopen("srpar.txt","r");
+	if (fh)
+	{
+		lread=fgets(fh);
+		mydir=StrTrim(StrExtract(lread,1,'='),"");
+		PlotText(mydir,BarCount-1,H[BarCount-1],colorYellow); 
+		fclose(fh);
+	}
+	else PlotText("Parameter File Not found",BarCount-10,H[BarCount-1],colorYellow);
+
+	fh=fopen(mydir+Name()+"tradescsv.txt","w");
+
+	if (fh)
+	{
+		ds="Name,Date,Time,Type,TradePrice,SL-Points,Maxprofit,Minprofit,ExitProfit,TargetProfit,CumExitProfit,CumTargetProfit,\n";
+		fputs(ds,fh);lpass=0;exiti=lastsigi=prevsigi=0;
+		for (i=0;i<BarCount;i++)
+		{
+			if (Cover[i]){exiti=i;exit=-2;}
+			if (sell[i]){exiti=i;exit=2;}	
+
+			if ((Buy[i]==1 OR Short[i]==1 ) )
+			{
+			
+				if (lastsigi>0 AND lastsigi>exiti)
+				{
+					ds=WriteVal(maxprofitprev[i],1.2,0)+","+WriteVal(minprofitprev[i],1.2,0)+","+WriteVal(exitprofitprev[i],1.2,0)+","+
+						WriteVal(targetprofitprev[i],1.2,0)+","+WriteVal(dispcumexitprofit[i],1.2,0)+","+
+						WriteVal(dispcumtargetprofit[i],1.2,0)+"\n";
+					fputs(ds,fh);
+				}
+
+			
+			
+				if (Buy[i] ){prevsig=lastsig;prevsigi=lastsigi;lastsig=1;lastsigi=i;}
+				if (short[i] ){prevsig=lastsig;prevsigi=lastsigi;lastsig=-1;lastsigi=i;}
+				
+				ds=Name()+","+WriteVal(int(Datey[i]/10000)+1900,1,0)+WriteIf(Datey[i]%10000<1000,"0","")+WriteVal(Datey[i]%10000,1,0)+","+timecon(int(tn[i]/100))+","
+					+WriteIf(lastsig==1,"Buy,"+WriteVal(BuyPrice[i],1.2,0)+",",WriteIf(lastsig==-1,"Short,"+WriteVal(ShortPrice[i],1.2,0)+",",""))
+					+WriteVal(slpoints[i],1.2,0)+",";
+				fputs(ds,fh);
+			}
+				
+			if ((exiti!=i AND prevsigi>exiti AND prevsigi>lastsigi) OR (lastsigi!=i AND exiti==i AND exiti>lastsigi AND lastsigi>0 AND exiti>0))
+			{
+				ds=WriteVal(maxprofit[i],1.2,0)+","+WriteVal(minprofit[i],1.2,0)+","+WriteVal(exitprofit[i],1.2,0)+","+
+					WriteVal(targetprofit[i],1.2,0)+","+WriteVal(dispcumexitprofit[i],1.2,0)+","+
+					WriteVal(dispcumtargetprofit[i],1.2,0)+"\n";
+				fputs(ds,fh);
+			}
+
+
+
+
+				
+				
+				
+			
+			
+			
+			if (i==BarCount-1)
+			{
+				if (lastsigi>exiti)
+				{
+					ds=WriteVal(maxprofit[i],1.2,0)+","+WriteVal(minprofit[i],1.2,0)+","+WriteVal(exitprofit[i],1.2,0)+","+WriteVal(targetprofit[i],1.2,0)+","+WriteVal(dispcumexitprofit[i],1.2,0)+","+WriteVal(dispcumtargetprofit[i],1.2,0)+"\n";
+					fputs(ds,fh);
+					/*ds=Name()+","+WriteVal(int(Datey[i]/10000)+1900,1,0)+WriteIf(Datey[i]%100<10,"0","")+WriteVal(Datey[i]%100,1,0)+","+WriteIf(tn[i]<100000,"0","")+WriteVal(tn[i],1.,0)+",";
+					fputs(ds,fh);
+					ds=WriteIf(lastsig==1,"EXIT,"+WriteVal(ah[i],1.2,0)+",",WriteIf(lastsig==-1,"EXIT,"+WriteVal(al[i],1.2,0)+",",",,"))+WriteVal(maxprofit[i],1.2,0)+","+WriteVal(minprofit[i],1.2,0)+","+WriteVal(exitprofit[i],1.2,0)+","+WriteVal(targetprofit[i],1.2,0)+","+WriteVal(cumexitprofit[i],1.2,0)+","+WriteVal(cumtargetprofit[i],1.2,0)+"\n";
+					fputs(ds,fh);*/
+				}
+
+			}
+
+			//if (i==BarCount-1)fclose(fh);
+		}
+	}
+}
+
+if (Readtrades)
+{
+	fh=fopen("srpar.txt","r");
+	if (fh)
+	{
+		lread=fgets(fh);
+		mydir=StrTrim(StrExtract(lread,1,'='),"");
+		PlotText(mydir,BarCount-1,H[BarCount-1],colorYellow); 
+		fclose(fh);
+	}
+	else PlotText("Parameter File Not found",BarCount-10,H[BarCount-1],colorYellow);
+
+}
+
+

@@ -1,0 +1,9 @@
+// Example5.afl
+// Exploration
+// Checks for new 10 day high or 10 day low.
+Liquidity = MA( C * V, 21 );
+New10DayHigh = High == HHV( High, 10 );
+New10DayLow = Low == LLV( Low, 10 );
+Filter = Liquidity >= 1000000;
+AddColumn( New10DayHigh, "10 Day High", 1.0 );
+AddColumn( New10DayLow, "10 Day Low", 1.0 );

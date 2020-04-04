@@ -1,0 +1,19 @@
+//exploration 
+Filter=1; 
+//FixedDollarAmount = 750;
+//SetTradeDelays(1, 1, 1, 1);
+
+//MonthBegin = Month() != Ref( Month(), -1 );
+MidMonth = Day(); 
+//FirstPurchase = Cum( MonthBegin ) == 1;
+//TradeDayOfMonth = BarsSince( Day() < Ref(Day(),-1) ) + 1;
+//Buy = IIf(MonthBegin, sigScaleIn, 0 ); // each month increase position
+//Sell = 0; // we do not sell
+
+//PositionSize = FixedDollarAmount;
+
+AddColumn(C,"Close");
+AddColumn(BarsSince( Day() < Ref(Day(),-1) ) ,"BarsSince");
+AddColumn(MidMonth, "Mid Month");
+//AddColumn(TradeDayOfMonth, "TradeDayOfMonth");
+//Sell = Cross( movingAverage, C+5 );

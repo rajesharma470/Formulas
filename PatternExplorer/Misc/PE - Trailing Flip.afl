@@ -1,0 +1,57 @@
+/// -----------------------------------------------------------------------------------------
+/// PatternExplorer.com - Trailing Flip
+/// Copyright © PatternExplorer.com
+/// @link https://www.PatternExplorer.com
+/// Email: support@PatternExplorer.com
+/// -----------------------------------------------------------------------------------------
+
+FormulaName = "PE - Trailing Flip";
+
+SetChartOptions(0, chartShowDates | chartShowArrows | chartLogarithmic | chartWrapTitle);
+#pragma nocache
+#include_once <\PEInc\PatternExplorer_f0.afl>
+#include_once "C:\Program Files\AmiBroker\Formulas\PatternExplorer\$ Customization\PE - Configuration.afl"
+#include_once "C:\Program Files\AmiBroker\Formulas\PatternExplorer\$ Customization\PE - Extensions.afl"
+
+_SECTION_BEGIN("Trail Flip");
+plotTrailLevelsSwitch = ParamToggle("Plot Trail Levels", "Off|On", 0);
+plotTrailFlipSwitch = ParamToggle("Plot Trail Flip", "Off|On", 1);
+
+longTrailColor = ParamColor("LongTrail Color", IIF(PeTheme == "Light", colorGreen, colorLime));
+shortTrailColor = ParamColor("ShortTrail Color", def_TAIO_dnColor);
+
+longTrailStyle = ParamStyle("LongTrail Style", styleStaircase | styleThick);
+shortTrailStyle = ParamStyle("ShortTrail Style", styleStaircase | styleThick);
+_SECTION_END();
+
+#include_once <\PEInc\PatternExplorer_1.afl>
+
+AddCustomCodeBeforePE();
+
+Filter = def_Filter AND NOT GroupID() == 253;
+AddDefaultColumns();
+
+// The first parameter defines the trigger base from which the long distance is calculated
+// The 2nd parameter defines the trigger base from which the short distance is calculated
+
+trailAmount = 2.0 * ATR(14); // Simple ATR trigger distance
+// trailAmount = C * 0.05; // 5% trigger distance. 
+PeTrailFlip(L, H, trailAmount);
+
+if (plotTrailLevelsSwitch)
+{
+	Plot(LongLevel, " LongLevel", longTrailColor, longTrailStyle | styleDashed, Null, Null, 0, 0, def_LineWidth);
+	Plot(ShortLevel, " ShortLevel", shortTrailColor, shortTrailStyle | styleDashed, Null, Null, 0, 0, def_LineWidth);
+}
+
+if (plotTrailFlipSwitch)
+{
+	Plot(LongTrail, " LongTrail", longTrailColor, longTrailStyle, Null, Null, 0, 0, def_LineWidth);
+	Plot(ShortTrail, " ShortTrail", shortTrailColor, shortTrailStyle, Null, Null, 0, 0, def_LineWidth);
+}
+
+ToolTip = def_ToolTip;
+
+AddCustomCodeAfterPE();
+
+Title = "PatternExplorer.com - Trailing Flip" + default_PriceTitle;

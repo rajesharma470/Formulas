@@ -1,0 +1,52 @@
+
+/// -----------------------------------------------------------------------------------------
+/// PatternExplorer.com - Trailing Stop
+/// Copyright © PatternExplorer.com
+/// @link https://www.PatternExplorer.com
+/// Email: support@PatternExplorer.com
+/// -----------------------------------------------------------------------------------------
+
+FormulaName = "PE - Trailing Stop";
+
+SetChartOptions(0, chartShowDates | chartShowArrows | chartLogarithmic | chartWrapTitle);
+#pragma nocache
+#include_once <\PEInc\PatternExplorer_f0.afl>
+#include_once "C:\Program Files\AmiBroker\Formulas\PatternExplorer\$ Customization\PE - Configuration.afl"
+#include_once "C:\Program Files\AmiBroker\Formulas\PatternExplorer\$ Customization\PE - Extensions.afl"
+
+_SECTION_BEGIN("Trail Stop");
+plotLongTrailStopSwitch = ParamToggle("Plot Long TrailStop", "Off|On", 1);
+plotShortTrailStopSwitch = ParamToggle("Plot Short TrailStop", "Off|On", 1);
+
+longTrailColor = ParamColor("LongTrail Color", IIF(PeTheme == "Light", colorGreen, colorLime));
+shortTrailColor = ParamColor("ShortTrail Color", def_TAIO_dnColor);
+
+longTrailStyle = ParamStyle("LongTrail Style", styleStaircase | styleThick);
+shortTrailStyle = ParamStyle("ShortTrail Style", styleStaircase | styleThick);
+_SECTION_END();
+
+#include_once <\PEInc\PatternExplorer_1.afl>
+
+AddCustomCodeBeforePE();
+
+Filter = def_Filter AND NOT GroupID() == 253;
+AddDefaultColumns();
+
+trailAmount = 2.0 * ATR(14); // Simple ATR stop distance => 2 * ATR(14);
+// trailAmount = C * 0.05; // 5% stop distance. 
+
+// The first parameter defines the stop base from which the distance is calculated
+trailStopLong = PeTrailStopLong(L, trailAmount); 
+trailStopShort = PeTrailStopShort(H, trailAmount);
+
+if (plotLongTrailStopSwitch)
+	Plot(trailStopLong, " TrailStopLong", longTrailColor, longTrailStyle, Null, Null, 0, 0, def_LineWidth);
+
+if (plotShortTrailStopSwitch)
+	Plot(trailStopShort, " TrailStopShort", shortTrailColor, shortTrailStyle, Null, Null, 0, 0, def_LineWidth);
+
+ToolTip = def_ToolTip;
+
+AddCustomCodeAfterPE();
+
+Title = "PatternExplorer.com - Trailing Stop" + default_PriceTitle;

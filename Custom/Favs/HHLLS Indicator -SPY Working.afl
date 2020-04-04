@@ -1,0 +1,86 @@
+// uncomment line below if you want to 
+// calculate the indicator always using 
+// SP500 or whatever fixed symbol you wish 
+// SetForeign("^GSPC" ); 
+
+///This is for SPY - Last updated date : 8/26/2019
+hh = High; 
+ll = Low; 
+Buy=0;
+Sell =0;
+BuyPrice= 0;
+SellPrice=0;
+PosQty = 500; 
+SetOption( "MaxOpenPositions", PosQty ); 
+SetPositionSize( 100, spsShares );
+//PositionSize =-10;
+
+//SetTradeDelays( 1, 1, 1, 1 );
+
+periodParam =Param("PeriodParam",35, 5, 100, 1);
+targetParam = 0;//Param("TargetParam", 0, 0, 20, 1);
+period = Optimize("Period", periodParam, 20,100,5); //20
+periodH = period;//Optimize("periodH", 20, 20, 100, 5); 
+periodL = period;//Optimize("periodL", 20, 20, 100, 5);
+
+hhh = IIf( hh > Ref( hh, -1 ), 
+          (hh - LLV( hh, periodH ))/( HHV( hh, periodH) - LLV( hh, periodH) ), 
+          0 ); 
+          
+hhs = 100 * EMA( hhh, periodH );          
+          
+lll = IIf( ll < Ref( ll, -1 ), 
+          (HHV( ll, periodL ) - ll)/( HHV( ll, periodL ) - LLV( ll, periodL ) ), 
+          0 );          
+   
+lls = 100 * EMA( lll, periodL );   
+
+Target = Optimize("Target Price", targetParam, 0, 20,1); //5
+//CutOff = Optimize("Cut Off", 20, 20, 50, 2);
+BuySignal = hhs > lls+Target;
+//SellSignal = Cross(lls, hhs);
+SellSignal =0;
+//Short=Sell;
+//Cover =Buy;
+//BuySignal =ExRem(BuySignal,SellSignal);
+//SellSignal =ExRem(SellSignal, BuySignal);
+
+Buy = IIf(BuySignal, sigScaleIn, 0);
+Sell = IIf(SellSignal, sigScaleIn, 0);
+
+//BuyPrice =IIf(Buy, Ref(Close, -1), 0);
+//SellPrice = IIf(Sell, Ref(Close, -1), 0);
+//Buy = ExRem(Buy, Sell);
+//Sell=ExRem(Sell,Buy);
+ 
+Short = Sell;
+Cover = Buy;
+Percent = Optimize("Stop Percent", 4, 2,10,1);
+ApplyStop(stopTypeProfit, stopModePercent, Percent, False);
+ApplyStop(stopTypeTrailing, stopModePercent, 3, True); 
+
+Plot( hhs, "HHS" + periodH, colorBrightGreen ); 
+Plot( lls, "LLS" + periodL, colorRed ); 
+//PlotShapes(shapeStar, colorBlue);//
+//Plot( BuyPrice, "BuyPrice", colorBrown);
+Plot(50, "Cut off ", colorBlue);
+
+if ( Status( "action" ) == actionExplore )
+{
+//Filter= (BuyPrice!=0 OR SellPrice!=0) AND (hhs-lls<Target OR lls-hhs<Target);
+//Explore
+Filter =1;
+
+//text1 = WriteIf(Buy AND (hhs-lls-Target-10 < 0), "Ready to SELL Lower below", "Nothing to do, unless huge price changes");
+//text2 = WriteIf(Sell AND (lls-hhs-Target-10 < 0), "Ready to go LONG higher above", text1);
+
+AddTextColumn(WriteIf(Sell AND (lls-hhs-Target < 0), "Ready to go LONG higher above", WriteIf(Buy AND (hhs-lls-Target < 0), "Ready to SELL Lower below", "Nothing to do, unless huge price changes")), "Signal");
+AddColumn(IIf(Buy, L, IIf(Sell, H, 0)),"Price",1.4);
+AddColumn( lls-hhs-Target < 0, "lls-hhs-Target < 0", 1);
+AddColumn( hhs-lls-Target < 0, "hhs-lls-Target < 0", 1);
+AddColumn(hhs, "hhs",1.2);
+AddColumn(lls, "lls", 1.2);
+AddColumn(hhs-lls-Target, "hhs-lls-Target", 1.2);
+AddColumn( Sell, "Sell", 1);
+AddColumn( Buy, "Buy", 1);
+}

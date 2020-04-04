@@ -1,0 +1,63 @@
+/// -----------------------------------------------------------------------------------------
+/// PatternExplorer.com - Sector industry trend analysis
+/// Copyright © PatternExplorer.com
+/// @link https://www.PatternExplorer.com
+/// Email: support@PatternExplorer.com
+/// -----------------------------------------------------------------------------------------
+
+FormulaName = "PE - SI Trend";
+
+SetChartOptions(1, chartShowDates + chartWrapTitle);
+#pragma nocache
+#include_once <\PEInc\PatternExplorer_f0.afl>
+#include_once "C:\Program Files\AmiBroker\Formulas\PatternExplorer\$ Customization\PE - Configuration.afl"
+#include_once "C:\Program Files\AmiBroker\Formulas\PatternExplorer\$ Customization\PE - Extensions.afl"
+
+AddCustomCodeBeforePE();
+
+_SECTION_BEGIN("Colors");
+SectorColor = ParamColor("Sector", def_SectorTrendColor);
+IndustryColorUP = ParamColor("Industry Trend up", def_IndustryUpColor);
+IndustryConsolidation_color  = ParamColor("Industry Consolidation", colorLightBlue);
+IndustryColorDN = ParamColor("Industry Trend down", def_Color2);
+_SECTION_END();
+
+AddGradientBackground(def_BackgroundColorSwitch, def_BackgroundTopColor, def_BackgroundBottomColor, def_TitleBackgroundColor);
+
+Plot(0, "", 0, styleHidden + styleNoLabel, Null, Null, 0, 0, def_LineWidth);
+Plot(iFBu_p, "Bullish-%", IndustryColorUP, styleThick, Null, Null, 0, 0, def_LineWidth);
+Plot(iFBe_p, "Bearish-%", IndustryColorDN, styleThick, Null, Null, 0, 0, def_LineWidth);
+Plot(sFBu_p, "Bullish-%", sectorcolor, styleLine, Null, Null, 0, 0, def_LineWidth * 3);
+
+Longfilter =  iFBu_p >= 50 AND sFBu_p >= 50 AND C > PeGMA(C, 20);
+Shortfilter = iFBu_p <= 50 AND sFBu_p <= 50 AND C < PeGMA(C, 20);
+
+SectorBuy = Cross(sFBu_p, 50);
+SectorSell = Cross(50, sFBu_p);
+IndustryBuy = Cross(iFBu_p, 50);
+IndustrySell = Cross(50, iFBu_p);
+
+if (inAA)
+{
+    _SECTION_BEGIN("Automatic Analysis");
+    FilterUndefined = ParamToggle("Hide undefined sectors and industries", "No,Yes", 1);
+    _SECTION_END();
+
+	Filter = def_Filter AND SymF AND IIf(FilterUndefined, IIf(StrLeft(Name(), 1) != "~", SectorID() > 0 AND IndustryID() > 0, SymFSI), 1);
+	AddDefaultColumns();
+	AddColumn(IIf(SectorBuy, 66, IIf(SectorSell, 83, Null)), "Sector Signal", formatChar, IIf(SectorBuy, colorGreen, IIf(SectorSell, colorRed, colorDefault)), colorDefault);
+	AddColumn(IIf(IndustryBuy, 66, IIf(IndustrySell,  83, Null)), "Industry Signal", formatChar, IIf(IndustryBuy, colorGreen, IIf(IndustrySell, colorRed, colorDefault)), colorDefault);
+	AddColumn(sFBu_p, "Sector Trend", 1, IIf(sFBu_p > 50, colorGreen, colorRed), colorDefault);
+	AddColumn(iFBu_p, "Industry Trend", 1, IIf(iFBu_p > 50, colorGreen, colorRed), colorDefault);
+	AddColumn(sFT, "Markets in Sector", 1);
+	AddColumn(iFT, "Markets in Industry", 1);
+}
+
+ToolTip = def_ToolTip;
+
+AddCustomCodeAfterPE();
+
+Title = "PatternExplorer.com - Sector Industry Trend Analysis - " + Name() + " - {{INTERVAL}} {{DATE}}"
+        + "\n" + EncodeColor(SectorColor) + "Sector: " + SectorID(1) + ", " + WriteVal(sFT, 1.0) + WriteIf(sFT > 1, " Markets", " Market") + ", " + WriteVal(sFBu_p, 1.0) + "% in UpTrend "
+        + "\n" + EncodeColor(IndustryColorUP) + "Industry: " + IndustryID(1) + ", " + WriteVal(iFT, 1.0) + WriteIf(iFT > 1, " Markets", " Market")  + ", " + WriteVal(iFBu_p, 1.0) + "% in UpTrend ";
+        

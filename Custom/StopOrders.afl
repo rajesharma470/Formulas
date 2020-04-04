@@ -1,0 +1,14 @@
+//EnterAtMarket
+
+SetTradeDelays(0,0,0,0);
+
+Buy=H>Ref(HHV(H,20),-1);
+Sell=L<Ref(LLV(L,10),-1);
+
+BuyPrice=Ref(HHV(H,20),-1);
+SellPrice=Ref(LLV(L,10),-1);
+
+Buy=ExRem(Buy, Sell);
+Sell=ExRem(Sell, Buy);
+Short=Sell;
+Cover=Buy;

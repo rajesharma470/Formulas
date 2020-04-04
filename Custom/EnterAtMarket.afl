@@ -1,0 +1,15 @@
+//EnterAtMarket
+
+ApplyStop(stopTypeProfit, stopModePercent, 10);
+
+SetTradeDelays(0,0,0,0);
+BuyPrice=C;
+SellPrice=C;
+
+MA1 = MA(C,5);
+MA2 = MA(C,25);
+
+Buy = Cross(MA1, MA2);
+Sell = Cross(MA2, MA1);
+//Short=Sell;
+//Cover=Buy;

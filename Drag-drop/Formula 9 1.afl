@@ -1,0 +1,118 @@
+_SECTION_BEGIN("Formula 9");
+// in reply to: http://forum.amibroker.com/t/afl-to-draw-trendline-between-previous-day-high-and-previous-day-low/2445
+// code assumes your working with intraday data (e.g. 5min data), 10/2017, E.M.Pottasch
+
+lineWidth = Param( "Linewidth", 1, 1, 10, 1 );
+zorder = Param( "Zorder", 1, -2, 2, 1 );
+
+dn = DateNum();
+newDay = dn != Ref( dn, -1 );
+bi = BarIndex();
+fvb = FirstVisibleValue( bi );
+lvb = LastVisibleValue( bi );
+
+highOfDay = TimeFrameGetPrice( "H", inDaily );
+lowOfDay = TimeFrameGetPrice( "L", inDaily );
+
+lbx1 = ValueWhen( newDay, bi );
+lbx0 = ValueWhen( newDay, bi, 0 );
+ph1 = ValueWhen( highOfDay == H, H );
+px1 = ValueWhen( highOfDay == H, bi );
+pdd1 = ValueWhen( highOfDay == H, dn );
+tl1 = ValueWhen( lowOfDay == L, L );
+tx1 = ValueWhen( lowOfDay == L, bi );
+tdd1 = ValueWhen( lowOfDay == L, dn );
+
+SetChartBkColor( ColorRGB( 0, 0, 0 ) );
+Plot( Close, "Price", colorDefault, styleCandle, Null, Null, 0, 0, 1 );
+Plot( newday, "", colorDarkBlue, styleHistogram | styleOwnScale | styleNoLabel | styleNoRescale, 0, 1, 0, 0, 5 );
+Plot( highOfDay, "", colorGreen, styleLine, Null, Null, 0, 1, 1 );
+Plot( lowOfDay, "", colorRed, styleLine, Null, Null, 0, 1, 1 );
+
+GfxSetZOrder( zorder );
+GfxSetCoordsMode( 1 );
+
+cnt = 0; // count number of visible days
+
+for( i = lvb; i > fvb; i-- )
+{
+    idx = lbx1[ i ];
+
+    if( IsEmpty( idx ) ) break;
+
+    if( pdd1[ idx ] > tdd1[ idx ] )
+    {
+        hv = ph1[ idx - 1 ];
+        hx = px1[ idx - 1 ];
+        lv = tl1[ idx ];
+        lx = tx1[ idx ];
+    }
+    else
+        if( pdd1[ idx ] < tdd1[ idx ] )
+        {
+            hv = ph1[ idx ];
+            hx = px1[ idx ];
+            lv = tl1[ idx - 1 ];
+            lx = tx1[ idx - 1 ];
+        }
+        else
+            if( pdd1[ idx ] == tdd1[ idx ] )
+            {
+                hv = ph1[ idx ];
+                hx = px1[ idx ];
+                lv = tl1[ idx ];
+                lx = tx1[ idx ];
+            }
+
+    slope = ( hv - lv ) / ( hx - lx );
+
+    if( hx < lx )
+        line = LineArray( hx, hv, lx, lv );
+    else
+        line = LineArray( lx, lv, hx, hv );
+
+    Plot( IIf( line, line, Null ), "", colorYellow, styleLine | styleNoLabel | styleNoRescale, Null, Null, 0, zorder, lineWidth );
+
+    x1 = Max( hx, lx );
+
+    if( IsEmpty( x1 ) ) break;
+    else
+    {
+        x2 = idx;
+        dx = x2 - x1;
+        y1 = line[ x1 ];
+        y2 = y1 + dx * slope;
+
+        // extension inside same day (dashed yellow)
+        GfxSelectPen( colorYellow, lineWidth, 1 );
+        GfxMoveTo( x1, y1 );
+        GfxLineTo( x2, y2 );
+
+        // extension into next day (dashed violet)
+        x1 = idx;
+
+        if( IsEmpty( lbx0[ idx ] ) OR lbx0[ idx ] <= idx )
+        {
+            x2 = BarCount - 1;
+        }
+        else
+        {
+            x2 = lbx0[ idx ];
+        }
+
+        dx = x2 - x1;
+
+        y1 = y2;
+
+        y2 = y1 + dx * slope;
+        GfxSelectPen( colorViolet, lineWidth, 1 );
+        GfxMoveTo( x1, y1 );
+        GfxLineTo( x2, y2 );
+    }
+
+    i = lbx1[ idx ];
+    cnt++;
+}
+
+"cnt: " + cnt;
+_SECTION_END();

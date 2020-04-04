@@ -1,0 +1,50 @@
+// one bar delay (trade next bar) 
+SetTradeDelays( 1, 1, 1, 1 ); 
+// trade on open 
+BuyPrice = SellPrice = ShortPrice = CoverPrice = Open; 
+
+L1 = Ref( Low, -1 ); 
+L2 = Ref( Low, -2 ); 
+H1 = Ref( High, -1 ); 
+H2 = Ref( High, -2 ); 
+
+strategy = Param("Strategy", 1, 1, 4 ); 
+strategy = Optimize( "Strategy", strategy, 1, 4, 1 ); 
+
+switch( strategy ) 
+{ 
+    case 1: 
+    /* pivot */ 
+    PivotLow = L1 < L2 AND L1 < L; 
+    PivotHigh = H1 > H2 AND H1 > H; 
+    
+    Buy = PivotLow; 
+    Short = PivotHigh; 
+    break; 
+    
+    case 2: 
+    /* Bollinger band */ 
+    Buy = Cross( Close, BBandBot( Close, 15, 2 ) ); 
+    Short = Cross( BBandTop( Close, 15, 2 ), Close ); 
+    break; 
+    
+    case 3: 
+    /* rsi */ 
+    Buy = Cross( RSI( 5 ), 40 ); 
+    Short = Cross( 60, RSI( 5 ) ); 
+    break; 
+
+    case 4: 
+    /* rsi + higher low / lower high */ 
+    Buy = RSI( 5 ) < 40 AND L > L1; 
+    Short = RSI( 5 ) > 60 AND H < H1; 
+    break; 
+
+    default: 
+    Buy = Short = 0; 
+    break; 
+}    
+
+Sell = Cover = 0; // exit by timed exit only 
+// assumes we work in weekly interval 
+ApplyStop( stopTypeNBar, stopModeBars, 5 );

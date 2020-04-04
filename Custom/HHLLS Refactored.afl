@@ -1,0 +1,58 @@
+// uncomment line below if you want to 
+// calculate the indicator always using 
+// SP500 or whatever fixed symbol you wish 
+// SetForeign("^GSPC" ); 
+
+///This is for SPY - Last updated date : 8/26/2019
+hh = High; 
+ll = Low; 
+
+period = Optimize("Period", 35, 20,100,5); //20
+
+hhh = IIf( hh > Ref( hh, -1 ), 
+          (hh - LLV( hh, period ))/( HHV( hh, period) - LLV( hh, period) ), 
+          0 ); 
+          
+hhs = 100 * EMA( hhh, period );          
+          
+lll = IIf( ll < Ref( ll, -1 ), 
+          (HHV( ll, period ) - ll)/( HHV( ll, period ) - LLV( ll, period ) ), 
+          0 );          
+   
+lls = 100 * EMA( lll, period );   
+
+Target = Optimize("Target Price", 0, 0, 20,1); 
+
+BuySignal = hhs > lls+Target;
+SellSignal = lls > hhs;
+
+Buy = IIf(BuySignal, sigScaleIn, 0);
+Sell = IIf(SellSignal, sigScaleIn, 0);
+
+Short = Sell;
+Cover = Buy;
+Percent = Optimize("Stop Percent", 4, 2,10,1);
+ApplyStop(stopTypeProfit, stopModePercent, Percent, False);
+ApplyStop(stopTypeTrailing, stopModePercent, 3, True); 
+
+Plot( hhs, "HHS" + periodH, colorBrightGreen ); 
+Plot( lls, "LLS" + periodL, colorRed ); 
+
+Plot(50, "Cut off ", colorBlue);
+
+if ( Status( "action" ) == actionExplore )
+{
+
+Filter =1;
+
+
+AddTextColumn(WriteIf(Sell AND (lls-hhs-Target < 0), "Ready to go LONG higher above", WriteIf(Buy AND (hhs-lls-Target < 0), "Ready to SELL Lower below", "Nothing to do, unless huge price changes")), "Signal");
+AddColumn(IIf(Buy, L, IIf(Sell, H, 0)),"Price",1.4);
+AddColumn( lls-hhs-Target < 0, "lls-hhs-Target < 0", 1);
+AddColumn( hhs-lls-Target < 0, "hhs-lls-Target < 0", 1);
+AddColumn(hhs, "hhs",1.2);
+AddColumn(lls, "lls", 1.2);
+AddColumn(hhs-lls-Target, "hhs-lls-Target", 1.2);
+AddColumn( Sell, "Sell", 1);
+AddColumn( Buy, "Buy", 1);
+}

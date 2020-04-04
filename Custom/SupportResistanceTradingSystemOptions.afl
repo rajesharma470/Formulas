@@ -1,0 +1,51 @@
+_SECTION_BEGIN("Dynamic Support Resistance");
+SetTradeDelays( 1, 1, 1, 1 );
+SetOption( "InitialEquity", 200000); 
+//SetOption("FuturesMode" ,True); 
+SetOption("MinShares",1); 
+//SetOption("CommissionMode",2); 
+//SetOption("CommissionAmount",50); 
+//SetOption("AccountMargin",10); 
+SetOption("RefreshWhenCompleted",True); 
+SetPositionSize(1,spsShares);//spsShares);
+SetOption( "AllowPositionShrinking", True ); 
+rBuff = 0;//Optimize("Resistance Buffer", 1, 0, 5, 0.5); //0
+sBuff = 0;//Optimize("Support Buffer", 1, 0, 5, 0.5); //0
+BuyPrice=Open;
+SellPrice=Open;
+ShortPrice=Open;
+CoverPrice=Open;
+SetChartOptions(0,chartShowArrows|chartShowDates);
+period=Optimize("Swing",3,1,25,1); //3
+_N(Title = StrFormat("{{NAME}} - {{INTERVAL}} {{DATE}} Open %g, Hi %g, Lo %g, Close %g, {{VALUES}}, Swing Period %g ", O, H, L, C, period ));
+Plot( Close, "Price", colorWhite, styleCandle );
+res=HHV(H,period)+rBuff; //resistance
+sup=LLV(L,period)+sBuff; //support Dynamic
+DynamicPivot=IIf(ValueWhen(IIf(C>Ref(res,-1),1,IIf(C<Ref(sup,-1),-1,0))!=0,IIf(C>Ref(res,-1),1,IIf(C<Ref(sup,-1),-1,0)),1)==1,sup,res); 
+//If current close breaks the resistance then dynamic pivot level would be last support, if close breaks the support then dynamic 
+Plot(DynamicPivot, "DynamicPivot", colorBlue, styleStaircase);
+Buy = Cross(C,DynamicPivot) ; //Buy
+Sell = Cross(DynamicPivot,C) ; //Sell
+Short = Sell;
+Cover = Buy;
+StopLoss=2; 
+//ApplyStop(Type=0,Mode=1,Amount=StopLoss);
+//ApplyStop(stopTypeTrailing, stopModePoint, 3*ATR(22), True, True );
+//ApplyStop(stopTypeProfit, stopModePoint, 5, True);
+//ApplyStop(stopTypeNBar, stopModeBars, 10, True, False, 0);
+ApplyStop(stopTypeProfit, stopModePercent, 5, True);
+//ApplyStop(stopTypeLoss, stopModeDisable, 300);
+/* Plot Buy and Sell Signal Arrows */
+PlotShapes(IIf(Buy, shapeSquare, shapeNone),colorGreen, 0, L, Offset=-40); 
+PlotShapes(IIf(Buy, shapeSquare, shapeNone),colorLime, 0,L, Offset=-50); 
+PlotShapes(IIf(Buy, shapeUpArrow, shapeNone),colorWhite, 0,L, Offset=-45); 
+PlotShapes(IIf(Cover, shapeSquare, shapeNone),colorGreen, 0, L, Offset=-40); 
+PlotShapes(IIf(Cover, shapeSquare, shapeNone),colorLime, 0,L, Offset=-50); 
+PlotShapes(IIf(Cover, shapeUpArrow, shapeNone),colorWhite, 0,L, Offset=-45); 
+PlotShapes(IIf(Sell, shapeSquare, shapeNone),colorRed, 0, H, Offset=40); 
+PlotShapes(IIf(Sell, shapeSquare, shapeNone),colorOrange, 0,H, Offset=50); 
+PlotShapes(IIf(Sell, shapeDownArrow, shapeNone),colorWhite, 0,H, Offset=-45); 
+PlotShapes(IIf(Short, shapeSquare, shapeNone),colorRed, 0, H, Offset=40); 
+PlotShapes(IIf(Short, shapeSquare, shapeNone),colorOrange, 0,H, Offset=50); 
+PlotShapes(IIf(Short, shapeDownArrow, shapeNone),colorWhite, 0,H, Offset=-45);
+_SECTION_END();

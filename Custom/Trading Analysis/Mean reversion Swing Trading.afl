@@ -1,0 +1,26 @@
+array = Close;
+SetPositionSize( 30, spsPercentOfEquity ); 
+amount = Optimize("Amount", 23, 1, 50, 0.5 );
+zz0 = Zig( array, amount );
+zz1 = Ref( zz0, -1 );
+zz2 = Ref( zz0, -2 );
+tr = ValueWhen(zz0 > zz1 AND zz1 < zz2, zz1);
+pk = ValueWhen(zz0 < zz1 AND zz1 > zz2, zz1);
+PU = tr + 0.01 * abs(tr)*amount;
+PD = pk - 0.01 * abs(pk)*amount;
+ZZT = IIf( array >= PU AND zz0 > zz1, 1,
+IIf( array <= PD AND zz0 < zz1, -1, 0 ) );
+ZZT = ValueWhen( ZZT != 0, ZZT );
+// plot price bar chart
+Plot( Close, "Price", colorBlack, styleBar );
+// plot Zigzag and zigzag trend
+Plot( ZZT, "ZigZagTrend", colorRed, styleOwnScale );
+Plot( zz0, "ZigZag line", colorBlue, styleThick );
+// Plot the ribbon
+ribboncol= IIf( ZZT > 0, colorGreen, colorRed );
+Plot( 2, "ZZT Ribbon", ribboncol, styleArea | styleOwnScale | styleNoLabel, 0, 100 );
+GraphXSpace = 10;
+Buy = Cover = Cross( ZZT, 0 );
+Sell = Short = Cross( 0, ZZT );
+// plot arrows
+PlotShapes( Buy + 2 * Sell, ribboncol, 0, IIf( Buy, L, H ), -30 );

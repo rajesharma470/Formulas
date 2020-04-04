@@ -1,0 +1,187 @@
+/**
+From Traders.com October 2016
+**/
+
+function RSquared( array, period, smooth ) 
+{ 
+  bi = BarIndex(); 
+  r = Correlation( bi, array, period); 
+  rs = MA( r, smooth ); 
+  return rs ^ 2; 
+} 
+
+function VHF( period ) 
+{ 
+  nom = HHV( High, period ) - LLV( Low, period ); 
+  denom = Sum( abs( C - Ref( C, -1 ) ), period ); 
+
+  return nom /  denom; 
+} 
+
+
+function EffRatio( period, smooth ) 
+{ 
+   nom = abs( C - Ref( C, -period ) ); 
+   denom = Sum( abs( C - Ref( C, -1 ) ), period ); 
+
+   return MA( nom/denom, smooth ); 
+} 
+
+SetOption("ReverseSignalForcesExit", False ); 
+
+procedure SystemADX() 
+{ 
+   global Buy, Sell, Short, Cover; 
+   
+   period = 14; 
+   trend = 30; 
+   axmax = 42; 
+   lag = 12; 
+   crit = 22; 
+   mult = 1.8; 
+   maperiod = 50; 
+
+   ax = ADX( period ); 
+   mac = MA( Close, maperiod ); 
+   
+   strongbuy = Cross( ax, trend ) AND ax < axmax AND C > mac; 
+   regbuy = ax > mult * LLV( ax, lag ) AND Cross( ax, crit ) AND C > mac; 
+   
+   Buy = strongbuy OR regbuy; 
+   
+   strongshort = Cross( ax, trend ) AND ax < axmax AND C < mac; 
+   regshort = ax > mult * LLV( ax, lag ) AND Cross( ax, crit ) AND C < mac; 
+     
+   Short = strongshort OR regshort; 
+   
+   Sell = Cross( mac, C ); 
+   Cover = Cross( C, mac ); 
+   
+   Plot( ax, "ADX-" + period, colorBlue ); 
+   Plot( trend, "", colorDarkYellow); 
+   
+} 
+   
+procedure SystemR2() 
+{ 
+   global Buy, Sell, Short, Cover; 
+   
+   r2len = 18; 
+   smooth = 3; 
+   trend = 0.42; 
+   r2max = 0.85; 
+   lag = 10; 
+   lrcrit = 10; 
+   maperiod = 50; 
+   
+   R2 = RSquared( C, r2len, smooth ); 
+   
+   lr = 100 * LinRegSlope( C, r2len ); 
+   
+   flt = Cross( R2, trend ) AND R2 < R2max AND R2 > Ref( R2, -lag ); 
+   
+   mac = MA( C, maperiod ); 
+   
+   Buy = flt AND C > mac AND lr > lrcrit; 
+   Short = flt AND C < mac AND lr < -lrcrit; 
+   
+   Sell = Cross( mac, C ); 
+   Cover = Cross( C, mac ); 
+
+   Plot( R2, "Rsquared-" + r2len, colorRed ); 
+   Plot( trend, "", colorDarkYellow); 
+} 
+   
+procedure SystemVHF() 
+{ 
+   global Buy, Sell, Short, Cover; 
+   
+   period = 36; 
+   trend = 0.38; 
+   lag = 10; 
+   mult = 1.5; 
+   maperiod = 50; 
+   crit = 0.24; 
+   vfmax = 0.45; 
+   vf = VHF( period ); 
+
+   mac = MA( C, maperiod ); 
+     
+   strongbuy = Cross( vf, trend ) AND vf < vfmax AND vf > Ref( vf, -lag ) 
+               AND C > mac; 
+   regbuy = vf > mult * LLV( vf, lag ) AND Cross( vf, crit ) AND C > mac; 
+   
+   Buy = strongbuy OR regbuy; 
+   
+   strongshort = Cross( vf, trend ) AND vf < vfmax AND vf > Ref( vf, -lag ) 
+                 AND C < mac; 
+                 
+   regshort = vf > mult * LLV( vf, lag ) AND Cross( vf, crit ) AND C < mac; 
+   
+   Short = strongshort OR regshort; 
+   
+   Sell = Cross( mac, C ); 
+   Cover = Cross( C, mac ); 
+   
+   Plot( vf, "VHF-" + period, colorDefault ); 
+   Plot( trend, "", colorDarkYellow); 
+} 
+       
+procedure SystemER() 
+{ 
+   global Buy, Sell, Short, Cover; 
+   
+   period = 24; 
+   smooth = 3; 
+   trend = 0.36; 
+   ermax = 0.42; 
+   erlag = 3; 
+   mult = 2.5; 
+   crit = 0.26; 
+   maperiod = 50; 
+   
+   er = EffRatio( period, smooth ); 
+
+   mac = MA( C, maperiod ); 
+
+   strongbuy = Cross( er, trend ) AND er < ermax AND 
+               er > Ref( er, -erlag ) AND C > mac; 
+   regbuy = er > mult * LLV( er, erlag ) AND Cross( er, crit ) AND 
+            C > mac; 
+   
+   Buy = strongbuy OR regbuy; 
+   
+   strongshort = Cross( er, trend ) AND er < ermax AND 
+                 er > Ref( er, -erlag ) AND C < mac; 
+   regshort = er > mult * LLV( er, erlag ) AND Cross( er, crit ) AND 
+              C < mac; 
+
+   Short = strongshort OR regshort; 
+   
+   Sell = Cross( mac, C ); 
+   Cover = Cross( C, mac ); 
+   
+   Plot( er, "ER-" + period, colorGreen ); 
+   Plot( trend, "", colorDarkYellow); 
+}       
+
+sys = ParamList("Select the system", "ADX|RSquared|VHF|ER" ); 
+
+switch( sys ) 
+{ 
+case "ADX": 
+    SystemADX(); 
+    break; 
+case "RSquared": 
+    SystemR2(); 
+    break; 
+case "VHF": 
+    SystemVHF(); 
+    break; 
+case "ER": 
+    SystemER(); 
+    break; 
+default: 
+    Error("Undefined system"); 
+    break; 
+} 

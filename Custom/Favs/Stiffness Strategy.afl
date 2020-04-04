@@ -1,0 +1,30 @@
+ //STIFFNESS STRATEGY
+//Copyright Markos Katsanos 2018
+
+PosQty = 500; 
+SetOption( "MaxOpenPositions", PosQty ); 
+SetPositionSize( 2000, spsValue );  
+
+SetTradeDelays( 1, 1, 1, 1 ); 
+BuyPrice = OPEN; 
+SellPrice = OPEN;
+
+timeexit =Optimize("exit",4,4,4,1); //4, MONTHS
+MAB=Optimize("MAB",100,50,120,10); //100, MA DAYS
+PERIOD=Optimize(" STIFF PERIOD",60,40,80,10); //60, STIFFNESS PERIOD
+STIFFCRIT=Optimize("STIFFCRIT",90,90,95,5);  //90, STIFFNESS CRITICAL
+STIFFSELL=Optimize("STIFFSELL",60,50,60,10);  //50, stiffness sell
+
+//STIFFNESS
+MA2=MA(C,MAB)-.2*StDev(C,MAB);
+//MA2=Sum(V*Avg, MAB)/Sum(V,MAB)-.2*StDev(C,MAB);
+CLMA=C>MA2;
+PENS=Sum(CLMA,PERIOD);
+STIF=PENS*100/PERIOD; STIFFNESS=EMA(STIF,3);
+
+SPY = Foreign("SPY","C"); 
+
+BUY = EMA(SPY,100)>=Ref(EMA(SPY,100),-2)  AND Cross(STIFFNESS,STIFFCRIT) ;
+//Buy = Cross(Stiffness, stiffcrit);
+Sell =Cross(STIFFSELL,STIFFNESS);
+ApplyStop( stopTypeNBar, stopModeBars, timeexit*21 ); // time exit

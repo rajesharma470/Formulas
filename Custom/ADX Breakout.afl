@@ -1,0 +1,16 @@
+iadx = ADX(); // our indicator 
+
+// simple trading system rules 
+Buy = Cross( iadx, 40 ); 
+Sell = 0; 
+// exit by 2% trailing stop 
+ApplyStop( stopTypeTrailing, stopModePercent, 2 ); 
+
+// exploration 
+Filter = Buy; 
+AddColumn( iadx, "ADX" ); 
+
+// chart 
+Plot( iadx, "ADX", colorRed ); 
+Plot( 40, "Trigger", colorGreen ); 
+PlotShapes( Buy * shapeUpArrow, colorGreen );

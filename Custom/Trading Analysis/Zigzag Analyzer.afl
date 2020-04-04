@@ -1,0 +1,17 @@
+//Zigzag analyzer for appropriateness of an issue
+
+PricePoint = C;
+
+Percentage =10;
+
+Z = Zig(PricePoint, Percentage);
+
+Buy = Z<=Ref(Z,1) AND Z<=Ref(Z,-1);
+Sell = Z>=Ref(Z,1) AND Z>=Ref(Z,-1);
+Short = Sell;
+Cover = Buy;
+
+Plot(C,"C",colorBlack,styleCandle);
+Plot(Z,"Z",colorRed,styleLine);
+PlotShapes(shapeUpArrow*Buy,colorBrightGreen);
+PlotShapes(shapeDownArrow*Sell,colorRed);

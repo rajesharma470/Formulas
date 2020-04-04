@@ -1,0 +1,42 @@
+_SECTION_BEGIN("HHLLS Indicator");
+// uncomment line below if you want to 
+// calculate the indicator always using 
+// SP500 or whatever fixed symbol you wish 
+// SetForeign("^GSPC" ); 
+hh = High; 
+ll = Low; 
+Buy=0;
+BuyPrice=0;
+
+PosQty = 500; 
+SetOption( "MaxOpenPositions", PosQty ); 
+SetPositionSize( 2000, spsValue );  
+SetTradeDelays( 1, 1, 1, 1 );
+
+period = Param("period", 20, 10, 100 ); 
+
+hhh = IIf( hh > Ref( hh, -1 ), 
+          (hh - LLV( hh, period ))/( HHV( hh, 20 ) - LLV( hh, 20 ) ), 
+          0 ); 
+          
+hhs = 100 * EMA( hhh, period );          
+          
+lll = IIf( ll < Ref( ll, -1 ), 
+          (HHV( ll, period ) - ll)/( HHV( ll, 20 ) - LLV( ll, 20 ) ), 
+          0 );          
+   
+lls = 100 * EMA( lll, period );   
+
+Target = Optimize("Target Price", 5, 2, 20,1);
+Buy =  Cross(hhs, 50);
+Sell = Cross(lls, 50);
+
+Short=Sell;
+Cover =Buy;
+ExRem(Buy,Sell);
+ExRem(Sell, Buy);
+
+Plot( hhs, "HHS" + period, colorBrightGreen ); 
+Plot( lls, "LLS" + period, colorRed ); 
+Plot(50, "Cut off ", colorBlue);
+_SECTION_END();

@@ -1,0 +1,11 @@
+//EnterAtMarket
+
+SetTradeDelays(0,0,0,0);
+MA1 = MA(C,5);
+MA2 = MA(C,25);
+
+BuySig=Cross(MA1, MA2);
+Buy=(Ref(BuySig, -1) ==1) AND (L<0.99 * Ref(C, -1));
+BuyPrice= 0.99*Ref(C,-1);
+Sell=Cross(MA2, MA1);
+

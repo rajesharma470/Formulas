@@ -1,0 +1,35 @@
+// Money Flow Oscillator 
+LL = Low; 
+HH = High; 
+BuyPrice=Ref(O,1);
+SellPrice=Ref(O,1);
+PeriodsPar = Param("Period", 20, 1, 100,1);
+SetPositionSize( 100, spsPercentOfEquity );
+
+PL = Ref( LL, -1 ); 
+PH = Ref( HH, -1 ); 
+
+Dvs = ( HH - PL ) + ( PH - LL ) + 1e-10; 
+
+MLTP = IIf( HH < PL, -1, 
+       IIf( LL > PH,  1, 
+          ( ( HH - PL ) - ( PH - LL ) ) / dvs ) ); 
+
+Dvsv = IIf( V == 0, 1e-10, V ); 
+
+Periods = Optimize("Periods", PeriodsPar, 1, 100, 1 ); 
+
+MFO = Sum( MLTP * V, Periods ) / Sum( Dvsv, Periods ); 
+Level = Optimize("Level", 0, 0, 1, 0.05);
+BuySignal = IIf( Cross(MFO, 0+Level) , sigScaleIn, 0);//or (MFO > 0 AND C > 1.02 * BuyPrice) 
+SellSignal = IIf( Cross(0-Level, MFO) , sigScaleIn, 0);//OR (MFO < 0 AND C < 0.98 * SellPrice)
+Buy = ExRem(BuySignal, SellSignal);
+Sell= ExRem(SellSignal, BuySignal);
+Short = Sell;
+Cover = Buy;
+
+//ApplyStop(stopTypeProfit, stopModePercent, 10, False);
+//ApplyStop(stopTypeTrailing, stopModePercent, 5, True); 
+
+Plot( MFO, "MFO" + _PARAM_VALUES(), colorRed, styleThick ); 
+Plot( 0, "", colorBlue );

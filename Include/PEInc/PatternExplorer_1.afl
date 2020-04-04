@@ -1,0 +1,272 @@
+/// -----------------------------------------------------------------------------------------
+/// PatternExplorer.com - include file 1
+/// Copyright © PatternExplorer.com
+/// @link https://www.PatternExplorer.com
+/// Email: support@PatternExplorer.com
+/// -----------------------------------------------------------------------------------------
+
+InIndicator = Status("Action") == 1;
+
+_SECTION_BEGIN("Price");
+PE_AB_Style = ParamToggle("Price Style Source", "PatternExplorer|Amibroker", def_PE_AB_Style);
+pricestyle = IIf(PE_AB_Style, GetPriceStyle(), ParamStyle("Price Style", def_PriceStyle, maskAll));
+GraphXSpace = Param("Vertical Zoom", def_GraphXSpace, 0, 200, 0.5);
+upbar_col = ParamColor("Up Bar", def_upBarColor);
+dnbar_col = ParamColor("Down Bar", def_dnBarColor);
+Pstyle = ParamToggle("Heikin Ashi Style", "On|Off", 1);
+_SECTION_END();
+
+
+_SECTION_BEGIN("Volume");
+PlotVolume = ParamToggle("Plot Volume", "Off|On", def_PlotVolume);
+Type = ParamList("Color Mode", "Simple,Standard,Extended", def_VolumeType);
+UpColor = ParamColor("Up Color", def_VolumeUpColor);
+DnColor = ParamColor("Down Color", def_VolumeDnColor);
+NeutralColor = ParamColor("Neutral Color", def_VolumeNeutralColor);
+style =  ParamStyle("Style", styleHistogram | styleThick | styleOwnScale | styleNoTitle | styleNoLabel, maskHistogram);
+VolumeHeight = 7.1 - Param("Volume Height", def_VolumeHeight, 0, 7.1, 0.1);
+
+if (Type == "Simple" AND PlotVolume)
+    Plot(Volume, _DEFAULT_NAME(), NeutralColor, style, VolumeHeight);
+
+if (Type == "Standard" AND PlotVolume)
+    Plot(Volume, _DEFAULT_NAME(), IIf(C > O, UpColor, DnColor), style, VolumeHeight);
+
+if (Type == "Extended" AND PlotVolume)
+    Plot(Volume, _DEFAULT_NAME(), IIf(C > Ref(C, -1) AND V > Ref(V, -1), UpColor, IIf(C < Ref(C, -1) AND V > Ref(V, -1), DnColor, NeutralColor)), style, VolumeHeight);
+_SECTION_END();
+
+_SECTION_BEGIN("Taio Bars and Ribbons");
+TAIO_switchvalue = ParamList("Bar Color Mode", List = "Off,1 - Rising/Falling/Range,2 - Range/Trend,3 - Rising/Falling,4 - Zero based", def_TaioPriceMode);
+
+for (i = 0; i < 10; i++)
+{
+    if (StrExtract(List, i) == Taio_switchvalue)
+        TaioColorMode = i;
+}
+
+RibbonSwitchvalue = ParamList("Ribbon Color Mode", List = "Off,1 - Rising/Falling/Range,2 - Range/Trend,3 - Rising/Falling,4 - Zero based", def_RibbonsMode);
+
+for (i = 0; i < 10; i++)
+{
+    if (StrExtract(List, i) == RibbonSwitchvalue)
+        RibbonsColorMode = i;
+}
+
+period1 = Param("Period 1", def_TaioPeriod1, 1, 30, 1);
+period2 = Param("Period 2", def_TaioPeriod2, 1, 30, 1);
+upLevel = Param("Trend Level", def_TrendLevel, 0, 90);
+dnLevel = upLevel;
+TAIO_up_color = ParamColor("Taio > Trend Level", def_TAIO_upColor);
+TaioRangeP_color = ParamColor("Range (>0)", def_TaioPositiveRangeColor);
+TaioRangeN_color = ParamColor("Range (<0)", def_TaioNegativeRangeColor);
+TAIO_dnColor = ParamColor("Taio < Trend Level", def_TAIO_dnColor);
+_SECTION_END();
+
+Taio = PeTaio(period1, period2);
+TaioUp = Taio > upLevel & Taio > Ref(Taio, -1);
+TaioDn = Taio < dnLevel & Taio < Ref(Taio, -1);
+pricecolor = TaioColor(TaioColorMode, period1, period2, upLevel, dnLevel, upbar, dnbar, TAIO_up_color, TaioRangeP_color, TaioRangeN_color, TAIO_dnColor, colorWhite, def_defaultColor);
+Ribbonscolor = TaioColor(RibbonsColorMode, period1, period2, upLevel, dnLevel, upbar, dnbar, TAIO_up_color, TaioRangeP_color, TaioRangeN_color, TAIO_dnColor, colorWhite, def_defaultColor);
+xDiff = (HaHigh - Halow) * IIf(StrFind(Name(), "JPY"), 100, 10000);
+barcolor = IIf(HaClose >= HaOpen, upbar_col, dnbar_col);
+
+if (TaioColorMode == 0 AND Pstyle == 0)
+{
+    pricecolor = barcolor;
+}
+
+GraphZOrder = 1;
+
+if (Pstyle == 0)
+{
+    PlotOHLC(HaOpen, HaHigh, HaLow, HaClose, "Heikin Ashi", pricecolor, styleCandle | styleNoTitle);
+}
+else
+{
+    Plot(C, "Price", pricecolor, pricestyle + styleNoTitle);
+}
+
+Plot(IIf(RibbonsColorMode > 0, 1.5, -1e10), "", Ribbonscolor, styleOwnScale | styleArea | styleNoLabel, -0.1, 100);
+
+_SECTION_BEGIN("Bands and Channels");
+Band_switch = ParamToggle("On/off", "Off|On", def_BandSwitch);
+BandTyp = ParamList("Type", List1 = "1 - Bollinger Bands,2 - Headley Acceleration Bands,3 - Keltner Channel,4 - Price Channel", def_BandTyp - 1);
+P = ParamField("Price Field");
+Period = Param("Period", def_BandPeriod, 2, 100, 1);
+Width = Param("Width", def_BandWidth, 0, 10, 0.1);
+BandStyle = ParamStyle("Top/Bottom", def_BandStyle, maskAll);
+MidStyle = ParamStyle("Middle", def_MidStyle, maskAll);
+BandColor = ParamColor("Band Color", def_BandColor);
+MidColor = ParamColor("Middle Color", def_MidColor);
+
+function HABTop(period, width)
+{
+    BWRatio = (H - L) / ((H + L) / 2);
+    BandTop = MA(H * (1 + Width * BWRatio), Period);
+    return BandTop;
+}
+
+function HABBot(period, width)
+{
+    BWRatio = (H - L) / ((H + L) / 2);
+    BandBot = MA(L * (1 - Width * BWRatio), Period);
+    return BandBot;
+}
+
+procedure AddKeltnerChannel(array, periods, width)
+{
+    global KeltnerChannelTop;
+    global KeltnerChannelMid;
+    global KeltnerChannelBot;
+    KeltnerChannelMid = MA(array, Periods);
+    KeltnerChannelTop = KeltnerChannelMid + Width * ATR(Periods);
+    KeltnerChannelBot = KeltnerChannelMid - Width * ATR(Periods);
+}
+
+if (Band_switch AND BandTyp == "1 - Bollinger Bands")
+{
+    Plot(BBandTop(P, Period, Width), "BB Top" + _PARAM_VALUES(), BandColor, BandStyle);
+    Plot(MA(P, Period), "BB Middle" + _PARAM_VALUES(), MidColor, MidStyle);
+    Plot(BBandBot(P, Period, Width), "BB Bottom" + _PARAM_VALUES(), BandColor, BandStyle);
+}
+
+if (Band_switch AND BandTyp == "2 - Headley Acceleration Bands")
+{
+    Plot(HABTop(Period, Width), "HAB Top" + _PARAM_VALUES(), BandColor, BandStyle);
+    Plot(MA(C, Period), "HAB Middle" + _PARAM_VALUES(), MidColor, MidStyle);
+    Plot(HABBot(Period, Width), "HAB Bottom" + _PARAM_VALUES(), BandColor, BandStyle);
+}
+
+if (Band_switch AND BandTyp == "3 - Keltner Channel")
+{
+    AddKeltnerChannel(P, period, width);
+    Plot(KeltnerChannelTop, "KC Top" + _PARAM_VALUES(), BandColor, BandStyle);
+    Plot(KeltnerChannelMid, "KC Middle" + _PARAM_VALUES(), MidColor, MidStyle);
+    Plot(KeltnerChannelBot, "KC Bottom" + _PARAM_VALUES(), BandColor, BandStyle);
+}
+
+if (Band_switch AND BandTyp == "4 - Price Channel")
+{
+    AddChannel(H, L, period, 0.5, 0, 0);
+    Plot(ChannelHigh, "PC Top (" + period + ")", BandColor, BandStyle);
+    Plot(ChannelMiddle, "PriceChannel Middle (" + period + ")", MidColor, MidStyle);
+    Plot(ChannelLow, "PriceChannel Bottom (" + period + ")", BandColor, BandStyle);
+}
+
+_SECTION_END();
+
+_SECTION_BEGIN("Parabolic SAR");
+Psar_switch = ParamToggle("On/off", "Off|On", def_PSARSwitch);
+SARmax = Param("SAR max", 0.2, 0.01, 1, 0.01);
+SARacc = Param("SAR acc", 0.02, 0.005, 0.1, 0.005);
+Psar_up_color = ParamColor("Rising Points", def_PSarUpColor);
+Psar_dnColor = ParamColor("Falling Points", def_PSarDnColor);
+Plot(IIf(Psar_switch, SAR(SARacc, SARmax), -1e10), "Parabolic_Sar", IIf(SAR(SARacc, SARmax) > H, Psar_dnColor, Psar_up_color), styleDots + styleNoLine + styleNoRescale + styleNoTitle);
+_SECTION_END();
+
+AddGradientBackground(def_BackgroundColorSwitch, def_BackgroundTopColor, def_BackgroundBottomColor, def_TitleBackgroundColor);
+AddAverage ("Average 1", def_Avg1Period, def_Avg1Type, def_Avg1PriceField, 0, def_Avg1Color, def_Avg1Style, def_Avg1Switch);
+PeAvg1 = PeAverage;
+PeAvg1Switch = PeAverage_Switch;
+AddAverage ("Average 2", def_Avg2Period, def_Avg2Type, def_Avg2PriceField, 0, def_Avg2Color, def_Avg2Style, def_Avg2Switch);
+PeAvg2 = PeAverage;
+PeAvg2Switch = PeAverage_Switch;
+AddAverage ("Average 3", def_Avg3Period, def_Avg3Type, def_Avg3PriceField, 0, def_Avg3Color, def_Avg3Style, def_Avg3Switch);
+PeAvg3 = PeAverage;
+PeAvg3Switch = PeAverage_Switch;
+AddAverage ("Average 4", def_Avg4Period, def_Avg4Type, def_Avg4PriceField, 0, def_Avg4Color, def_Avg4Style, def_Avg4Switch);
+PeAvg4 = PeAverage;
+PeAvg4Switch = PeAverage_Switch;
+default_PriceTitle = def_title +
+                     EncodeColor(def_Color4) + WriteIf(Pstyle, "", ", Heikin Ashi On") + EncodeColor(colorDefault);
+
+procedure Calc123Points(priceAboveBelow_ATRMultiple, patternPriceBasis)
+{
+	global Valley, Top, Bars, TopHigh;
+    X = BarIndex();
+    ValleyInput = IIf(patternPriceBasis, L, C);
+    Valley =  PeValleyInput(ValleyInput, Bars, MinVertSize, SelectedMode = 1);
+    ValleyLow = ValueWhen(Valley, ValleyInput);
+    ValleyX = ValueWhen(Valley, X);
+    x_lastvalley = LastValue(ValueWhen(Valley, x, 1));
+    TopInput = IIf(patternPriceBasis, H, C);
+    Top = PeTopInput(TopInput, Bars, MinVertSize, SelectedMode = 1);
+    TopHigh = ValueWhen(Top, TopInput);
+    TopX = ValueWhen(Top, X);
+    x_lasttop = LastValue(ValueWhen(top, x, 1));
+    Sup_break = Cross(ValleyLow, C) & Ref(LowestSince(Ref(Valley, -1), Low) > ValleyLow, -1);
+    Sup_PriceJustAbove = L < ValleyLow + priceAboveBelow_ATRMultiple & L > ValleyLow & LowestSince(Ref(Valley, -1), Low, 1) > ValleyLow;
+    Sup_Confirmed = L <= ValleyLow & C > ValleyLow & Ref(LowestSince(Ref(Valley, -1), Low) > ValleyLow, -1);
+    Sup_Confirmed = Sup_Confirmed AND NOT Valley;
+    Res_Break = Cross(C, TopHigh) & Ref(HighestSince(Ref(Top, -1), High) < TopHigh, -1);
+    Res_PriceJustBelow = H > TopHigh - priceAboveBelow_ATRMultiple & H < TopHigh & HighestSince(Ref(Top, -1), High) < TopHigh;
+    Res_Confirmed = H >= TopHigh & C < TopHigh & Ref(HighestSince(Ref(Top, -1), High) < TopHigh, -1);
+    Res_Confirmed = Res_Confirmed AND NOT Top;
+    SupSignals = Sup_break | Sup_PriceJustAbove | Sup_Confirmed;
+    ResSignals = Res_Break | Res_PriceJustBelow | Res_Confirmed;
+}
+
+procedure CalcPatternBase(PatternPriceBasis, Sensitivity)
+{
+	global xa, xb, xc, xd, SL, RocSL, RL, RocRL, per;
+	per = (LastValue(ATR(30) / C)) * 10 * Sensitivity;
+	x = Cum(1);
+	StartPoint = 1;
+	PS = TroughBars(IIf(PatternPriceBasis, L, C), per, 1) == 0;
+	xb = LastValue(ValueWhen(PS, x, StartPoint));
+	xa = LastValue(ValueWhen(PS, x, StartPoint + 1));
+	yb = LastValue(ValueWhen(PS, IIf(PatternPriceBasis, L, C), StartPoint));
+	Ya = LastValue(ValueWhen(PS, IIf(PatternPriceBasis, L, C), StartPoint + 1));
+	xab_log = log(yb / yA) / (xb - xa);
+	SL = exp((x - xb) * xab_log) * yb;
+	RocSL = ROC(SL, 1);
+	PR1 = PeakBars(IIf(PatternPriceBasis, H, C), per, 1) == 0;
+	Xd = LastValue(ValueWhen(pR1, x, StartPoint));
+	xc = LastValue(ValueWhen(pR1, x, StartPoint + 1));
+	yd = LastValue(ValueWhen(pR1, IIf(PatternPriceBasis, H, C), StartPoint));
+	Yc = LastValue(ValueWhen(pR1, IIf(PatternPriceBasis, H, C), StartPoint + 1));
+	xcd_log = log(yd / yc) / (xd - xc);
+	RL = exp((x - xd) * xcd_log) * yd;
+	PeCPRHelper();
+}
+
+procedure CalcPatternBase2(PatternPriceBasis, Bars)
+{
+	global xa, xb, xc, xd, ya, yb, yc, yd, SL, RocSL, RL, RocRL, per, xab_log, xcd_log;
+	HH = HHV(H, 20);
+	LL = LLV(L, 20);
+	Mid = LL + ((HH - LL) / 2);
+	Div = 100 - (HH / (0.01 * Mid));
+	Per = LastValue(abs(Div));
+	x = Cum(1);
+	TopInput = IIf(PatternPriceBasis, H, C);
+	Top = ATRTopInput(TopInput, Bars, MinVertSize);
+	TopHigh = ValueWhen(Top, TopInput);
+	TopX = ValueWhen(Top, X);
+	ValleyInput = IIf(PatternPriceBasis, L, C);
+	Valley = ATRValleyInput(ValleyInput, Bars, MinVertSize);
+	ValleyLow = ValueWhen(Valley, ValleyInput);
+	ValleyX = ValueWhen(Valley, X);
+	x = Cum(1);
+	xb = LastValue(ValueWhen(Valley, x, 1));
+	xa = LastValue(ValueWhen(Valley, x, 2));
+	yb = LastValue(ValueWhen(Valley, IIf(PatternPriceBasis, L, C), 1));
+	Ya = LastValue(ValueWhen(Valley, IIf(PatternPriceBasis, L, C), 2));
+	xab_log = log(yb / yA) / (xb - xa);
+	SL = exp((x - xb) * xab_log) * yb;
+	RocSL = ROC(SL, 1);
+	xd = LastValue(ValueWhen(top, x, 1));
+	xc = LastValue(ValueWhen(top, x, 2));
+	yd = LastValue(ValueWhen(top, IIf(PatternPriceBasis, H, C), 1));
+	Yc = LastValue(ValueWhen(top, IIf(PatternPriceBasis, H, C), 2));
+	xcd_log = log(yd / yc) / (xd - xc);
+	RL = exp((x - xd) * xcd_log) * yd;
+	RocRL = ROC(RL, 1);
+	PeCPRHelper();
+}
+/// -----------------------------------------------------------------------------------------
+/// -----------------------------------------------------------------------------------------
+
+                     
+Version(6.20);

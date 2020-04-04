@@ -1,0 +1,39 @@
+//------------------------------------------------------------------------------
+//  Formula Name	:      Swing Support and Resistance for Amibroker AFL by pipschart
+//  Author	:      KrT group
+//  Uploader	:      www.pipschart.com
+//  E-mail		:      info@pipschart.com
+//  Amibroker Blog	:      www.pipschart.com/amibroker
+//  Origin		:      Modified & Collected from different sources.
+//------------------------------------------------------------------------------
+
+_SECTION_BEGIN("KrT group");
+GfxSetBkMode(1);
+X=750;
+Y=1;
+Font=10;
+GfxSelectFont("Impact",Font*2.2, 550);GfxSetTextColor(colorRed);GfxTextOut("KrT group",x,y);
+GfxSelectFont("Impact",Font*2.2, 550);GfxSetTextColor(colorGreen);GfxTextOut("RESEARCH",x+120,Y);
+
+_SECTION_END();
+
+//------------------------------------------------------------------------------
+
+_SECTION_BEGIN("Price");
+SetChartOptions(0,chartShowArrows|chartShowDates);
+_N(Title = StrFormat("{{NAME}} - {{INTERVAL}} {{DATE}} Open %g, Hi %g, Lo %g, Close %g (%.1f%%) {{VALUES}}", O, H, L, C, SelectedValue( ROC( C, 1 ) ) ));
+Plot( C, "Close", ParamColor("Color", colorDefault ), styleNoTitle | ParamStyle("Style") | GetPriceStyle() ); 
+_SECTION_END();
+
+_SECTION_BEGIN("SWING SUPPORT RESISTANCE");
+
+LB= Param("Look Back Periods",10,1,30,1);
+R=ValueWhen(Cross(MA(C,LB),C),HHV(H,LB),1);
+S=ValueWhen(Cross(C,MA(C,LB)),LLV(L,LB),1);
+Color=IIf(O>C,colorBlack,colorBlue);
+Plot (R,"Res",colorLime,8+16);
+Plot (s,"Sup",colorRed,8+16);
+Plot (C,"Close",color,64,32);
+
+GraphXSpace=4;
+_SECTION_END();

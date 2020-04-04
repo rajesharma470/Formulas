@@ -1,0 +1,46 @@
+
+SetChartOptions(0,chartShowArrows | chartShowDates);
+
+HaClose = (O + H + L + C)/4; 
+HaOpen = AMA( Ref( HaClose, -1 ), 0.5 ); 
+HaHigh = Max( H, Max( HaClose, HaOpen ) ); 
+HaLow = Min( L, Min( HaClose, HaOpen ) ); 
+xDiff = (HaHigh - Halow) * 10000;
+barcolor = IIf(HaClose >= HaOpen,colorGreen,colorRed);
+PlotOHLC( HaOpen, HaHigh, HaLow, HaClose, "", barcolor, styleCandle );
+
+
+//xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+//FORMULE
+stochup= StochK()>StochD();
+MACDup= MACD()>Signal();
+Hist= MACD()-Signal();
+Histup= Hist>Ref(Hist,-1) ;
+HAup = HaClose>=HaOpen;
+BuyHa= HaClose>=HaOpen;
+SellHa= HaClose<HaOpen;
+//======================================================================
+
+//PARAMTOGGLE
+
+// This combines indicators into one timing Signal
+//function ParamOptimize( description, default, minv, maxv, step )
+//    { return Optimize(description, Param(description,default, minv, maxv, step ), minv, maxv, step ); }
+tgl = ParamToggle("Result", "AND logic|Compare");
+// switch test calculation and compare the results
+if(tgl)
+{
+myBuy = BuyHa AND macdup AND histup AND stochup ;           
+myShort = SellHa AND !histup AND !stochup ;            
+}
+else
+{
+myBuy   = IIf( HaClose>=HaOpen AND MACD()>Signal() AND Hist>Ref(Hist,-1) AND StochK()>StochD()      ,1,0) ;                                                                       
+myShort = IIf( HaClose<HaOpen  AND Hist<Ref(Hist,-1) AND StochK()<StochD()     ,1,0);
+} 
+
+Buy = ExRem(mybuy,myshort);
+Sell = ExRem(myshort,mybuy);
+
+PlotShapes(IIf(Buy,shapeUpArrow,shapeNone),colorBlue,0,haLow,Offset=-15);
+PlotShapes(IIf(Sell,shapeDownArrow,shapeNone),colorRed,0,haHigh,Offset=-15);

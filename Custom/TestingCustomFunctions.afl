@@ -1,0 +1,48 @@
+
+//Gets all trend bars for the last number of bars 
+// example call would be getTrendBars(C>Ref(C,-1), 2)
+function getTrendBars(conditionArray, lastBars) {
+    result = Null;
+	for(bar =lastBars; bar < BarCount; bar++) {
+	    condition=True;
+		for(lBar=bar-lastBars; lBar < bar; lBar++) {
+			if(!conditionArray[lBar]) {
+				condition=False;
+				break;
+			}
+		}
+		if(condition) {
+		   result[bar] = True;
+		}
+	}
+	return result;
+}
+
+SetTradeDelays(0, 0, 0, 0);
+timePeriod = Optimize("Time Period", 3, 2, 5, 1);
+upTrend = getTrendBars( O < C && C > Ref(C, -1), timePeriod);
+dTrend = getTrendBars( O > C && C < Ref(C, -1), timePeriod);
+Buy=upTrend;
+Sell=dTrend;
+Short = Sell;
+Cover = Buy;
+
+Buy = ExRem(Buy,Sell);
+Sell = ExRem(Sell, Buy);
+Short = ExRem(Short,Cover);
+Cover = ExRem(Cover, Short);
+
+ApplyStop(stopTypeLoss, 
+          stopModePercent, 
+          Optimize( "Max. loss stop level", 1, 1, 10, 1 ), 
+          True ); 
+          
+ApplyStop(stopTypeProfit, 
+			stopModePercent, 
+			Optimize( "Trailing profit stop level", 8, 1, 30, 1 ), 
+			True);
+			
+ApplyStop(stopTypeTrailing , 
+			stopModePercent, 
+			Optimize( "Trailing profit stop level", 4, 1, 30, 1 ), 
+			True);

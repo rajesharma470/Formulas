@@ -1,0 +1,18 @@
+_SECTION_BEGIN("20/50/100/200 EMA Trending");
+
+W=EMA(C,20);
+X=EMA(C,50);
+Y=EMA(C,100);
+Z=EMA(C,200);
+
+Buy = Ref(W,-1)<Ref(X,-1) AND Ref(W,0)>Ref(X,0) AND Ref(Y,0)>Ref(Z,0) ;
+Sell = Ref(W,-1)>Ref(X,-1) AND Ref(W,0)<Ref(X,0)  AND Ref(Y,0)<Ref(Z,0) ;
+
+PlotShapes( shapeUpArrow*Buy, colorPink,0, L, -20);
+PlotShapes( shapeDownArrow*Sell, colorPink,0,H, -20) ;
+
+Filter=Buy OR Sell;
+
+AddColumn(Buy,"BUY",1.2);
+AddColumn(Sell,"SELL",1.2);
+_SECTION_END();

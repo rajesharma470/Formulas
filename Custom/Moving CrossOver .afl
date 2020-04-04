@@ -1,0 +1,11 @@
+fPeriod = Optimize("First", 3, 1, 40, 1); // number of averaging periods 
+//sPeriod = Optimize("Second", 50, 40, 100, 2);
+
+//lPeriod = Optimize("Long", 100, 90, 130, 10);
+//llPeriod = Optimize("LongLong", 200, 150, 220, 10); 
+w = EMA( Close, fPeriod ); // exponential moving average
+//x = EMA( Close, sPeriod);
+//y = EMA( Close, lPeriod);
+//z = EMA( Close, llPeriod);
+Buy = Cross(w, C); //AND Ref(y, 0) > Ref(z, 0); // buy when close crosses ABOVE moving average
+Sell = Cross(C, w); //AND Ref(y, 0) < Ref(z, 0); // sell when closes crosses BELOW moving average

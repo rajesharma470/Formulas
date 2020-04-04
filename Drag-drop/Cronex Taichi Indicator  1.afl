@@ -1,0 +1,24 @@
+_SECTION_BEGIN("Cronex Taichi Indicator ");
+// Downloaded From https://www.WiseStockTrader.com
+n1 = Param("1",9,1,200,1); 
+n2 = Param("2",26,1,400,1); 
+n3 = Param("3",52,1,600,1); 
+TenkanSen   =(HHV(H,n1)+LLV(L,n1))/2;           
+KijunSen    =(HHV(H,n2)+LLV(L,n2))/2;           
+ChinkouSpan =Ref(C,-n2);                        
+Cks         = Close;                             
+SenkouSpanA =Ref((KijunSen+TenkanSen)/2,-n2);   
+SpA         =(KijunSen+TenkanSen)/2;             
+SenkouSpanB =Ref((HHV(H,n3)+LLV(L,n3))/2,-n2);   
+SpB         =(HHV(H,n3)+LLV(L,n3))/2;            
+
+Taichi=(TenkanSen+KijunSen+SenkouSpanA+SenkouSpanB)/4;
+TaichiFor=(SenkouSpanA+SenkouSpanB)/2;
+Signall = WMA(Taichi,n2);
+SSignall = Wma(Taichi,n3);
+Plot( C, "Price", colorDefault, styleCandle );
+Plot(Taichi,"Taichi",colorGreen,styleLine);
+Plot(TaichiFor,"TaichiFor",colorred,styleLine);
+Plot(Signall,"Signal1",colorAqua,styleDashed);
+Plot(SSignall,"Signal2",colorLightOrange,styleDashed);
+_SECTION_END();

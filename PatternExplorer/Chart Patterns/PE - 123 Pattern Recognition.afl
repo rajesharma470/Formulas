@@ -1,0 +1,241 @@
+/// -----------------------------------------------------------------------------------------
+/// PatternExplorer.com - 123 Pattern Recognition
+/// Copyright © PatternExplorer.com
+/// @link https://www.PatternExplorer.com
+/// Email: support@PatternExplorer.com
+/// -----------------------------------------------------------------------------------------
+
+FormulaName = "PE - 123 Pattern Recognition";
+
+SetChartOptions(0, chartShowDates | chartWrapTitle);
+#pragma nocache
+#include_once <\PEInc\PatternExplorer_f0.afl>
+#include_once "C:\Program Files\AmiBroker\Formulas\PatternExplorer\$ Customization\PE - Configuration.afl"
+#include_once "C:\Program Files\AmiBroker\Formulas\PatternExplorer\$ Customization\PE - Extensions.afl"
+
+AddCustomCodeBeforePE();
+
+AddAlertParamExt(def_AudioAlert, def_EmailAlert, def_BarComplete, "Jj9D2efLqM", "2va24Dt4SD", "JHYo9YKZhk", def_UseAlertParamsFromChart);
+
+_SECTION_BEGIN("Alerts");
+P123SetupAlert = StaticVar(ParamToggle("P123 Setup", "Off,On", 1), "jog9SAJSgP", UseAlertParametersFromChart);
+P123BreakoutAlert = StaticVar(ParamToggle("P123 Breakout", "Off,On", 1), "jog9SAJSgP", UseAlertParametersFromChart);
+_SECTION_END();
+
+_SECTION_BEGIN("Sensitivity");
+AddUseParametersFromChart(def_UseParametersFromChart);
+PatternPriceBasis = StaticVar(ParamToggle("Pattern Price Basis", "Close|High & Low", def_PatternPriceBasisFractals), "rytzaoekjx", UseParametersFromChart);
+SensitivityMode = StaticVar(ParamToggle("Sensitivity Mode", "Static|Dynamic", 1), "7ya9y7ruqw", UseParametersFromChart);
+PatternSize = StaticVarText(ParamList("Pattern Size", "Small|Medium|Large|Any", 1), "71f7jx7ran", UseParametersFromChart);
+PatternAccuracy = StaticVarText(ParamList("Pattern Accuracy", "Low|Medium|High|Extended: P3-P1 Break", 1), "08cy42uyxz", UseParametersFromChart);
+StaticBars = StaticVar(Param("Static Bars", 5, 1, 50, 1), "noxro93dm5", UseParametersFromChart);
+MinVertSize = 0.25; // Use larger values to filter more significant points. Values between 0 and 1 are recommended. 
+maxP3P1YLimitThreshold = 0.0; // Threshold to let P1.Y overrun P1.Y, defined as a factor of the P1.Y to P3.Y distance
+
+switch(PatternSize)
+{
+	case "Small":
+		Bars = 5;
+		MinBars = 1;
+		break;
+	
+	case "Medium":
+		Bars = 15;
+		MinBars = 6;
+		break;
+	
+	case "Large":
+		Bars = 30;
+		MinBars = 12;
+		break;
+		
+	case "Any":
+		Bars = 30;
+		MinBars = 1;
+		break;
+		
+	default:
+		Bars = 50;
+		MinBars = 1;
+		break;
+}
+
+switch(PatternAccuracy)
+{
+	case "Low":
+		MinP23ToP21Factor = 0.25;
+		MinVerticalP21Factor = 0.25;
+		P1HorizonalLookbackFactor = 1.0;
+		break;
+	
+	case "Medium":
+		MinP23ToP21Factor = 0.5;
+		MinVerticalP21Factor = 0.5;
+		P1HorizonalLookbackFactor = 2.0;
+		break;
+	
+	case "High":
+		MinP23ToP21Factor = 0.75;
+		MinVerticalP21Factor = 0.75;
+		P1HorizonalLookbackFactor = 3.0;
+		break;
+		
+	case "Extended: P3-P1 Break":
+		MinP23ToP21Factor = 1.0;
+		MinVerticalP21Factor = 0.75;
+		P1HorizonalLookbackFactor = 3.0;
+		maxP3P1YLimitThreshold = 0.5;
+		break;
+		
+	default:
+		MinP23ToP21Factor = 0.75;
+		MinVerticalP21Factor = 0.75;
+		P1HorizonalLookbackFactor = 3.0;
+		break;
+}
+
+_SECTION_END();
+
+_SECTION_BEGIN("Styles");
+PlotFractals = ParamToggle("Plot Fractals", "Off|On", 0);
+TopShape = Param("Top Fractal Typ", 21, 0, 50, 1);
+ValleyShape = Param("Valley Fractal Typ", 22, 0, 50, 1);
+_SECTION_END();
+
+_SECTION_BEGIN("Colors");
+LongSetupShapeColor = ParamColor("Long Setup", colorLime);
+ShortSetupShapeColor = ParamColor("Short Setup", colorRed);
+LongValleyShapeColor = ParamColor("Bottom Fractal", def_BuyShapeColor);
+ShortTopShapeColor = ParamColor("Top Fractal", def_SellShapeColor);
+_SECTION_END();
+
+#include_once <\PEInc\PatternExplorer_1.afl>
+
+priceAboveBelow_ATRMultiple = 0.5 * ATR(14);
+PrevLastLongP3Idx = BarCount;
+PrevLastShortP3Idx = BarCount;
+dynamicLongBars = Bars;
+dynamicShortBars = Bars;
+
+if (SensitivityMode)
+{	
+	for	(i = Bars; i >= MinBars; i--)
+	{
+		Bars = i;
+		Calc123Points(priceAboveBelow_ATRMultiple, patternPriceBasis);
+		Pe123Long(Valley, Top, Bars, MinP23ToP21Factor, MinVerticalP21Factor, P1HorizonalLookbackFactor, PatternPriceBasis, maxP3P1YLimitThreshold);
+		Pe123Short(Valley, Top, Bars, MinP23ToP21Factor, MinVerticalP21Factor, P1HorizonalLookbackFactor, PatternPriceBasis, maxP3P1YLimitThreshold);
+		
+		LastLongP3Idx = LastValue(BarsSince(LongPoint3));
+		if (LastLongP3Idx <= PrevLastLongP3Idx AND LastLongP3Idx > 0)
+		{
+			PrevLastLongP3Idx = LastLongP3Idx;
+			dynamicLongBars = Bars;
+		}	
+		
+		LastShortP3Idx = LastValue(BarsSince(ShortPoint3));
+		if (LastShortP3Idx < PrevLastShortP3Idx AND LastShortP3Idx > 0)
+		{
+			PrevLastShortP3Idx = LastShortP3Idx;
+			dynamicShortBars = Bars;
+		}
+	}
+}
+else
+{
+	Bars = StaticBars;
+	dynamicLongBars = StaticBars;
+	dynamicShortBars = StaticBars;
+}
+
+// Long
+Bars = IIf(SensitivityMode, dynamicLongBars, StaticBars);
+Calc123Points(priceAboveBelow_ATRMultiple, patternPriceBasis);
+Pe123Long(Valley, Top, dynamicLongBars, MinP23ToP21Factor, MinVerticalP21Factor, P1HorizonalLookbackFactor, PatternPriceBasis, maxP3P1YLimitThreshold);
+
+if (PlotFractals)
+{
+	PlotShapes(IIf(Top, TopShape, -1e10), ShortTopShapeColor, 0, H, def_BuyShapeOffset);
+	PlotShapes(IIf(Valley, ValleyShape, -1e10), LongValleyShapeColor, 0, L, def_SellShapeOffset);
+}
+
+// Short
+Bars = IIf(SensitivityMode, dynamicShortBars, StaticBars);
+Calc123Points(priceAboveBelow_ATRMultiple, patternPriceBasis);
+Pe123Short(Valley, Top, dynamicShortBars, MinP23ToP21Factor, MinVerticalP21Factor, P1HorizonalLookbackFactor, PatternPriceBasis, maxP3P1YLimitThreshold);
+
+if (PlotFractals)
+{
+	// Needs to be plotted again due to different bars adjustment
+	PlotShapes(IIf(Top, TopShape, -1e10), ShortTopShapeColor, 0, H, def_BuyShapeOffset);
+	PlotShapes(IIf(Valley, ValleyShape, -1e10), LongValleyShapeColor, 0, L, def_SellShapeOffset);
+}
+
+// Signals
+Buy = def_Buy AND LongBreakout;
+Sell = def_Sell AND ShortBreakout;
+Short = 0; // def_Short AND ShortBreakout;
+Cover = 0; // def_Cover AND LongBreakout;
+
+Filter = def_Filter AND NOT GroupID() == 253 
+	AND(LongSetup OR LongBreakout OR ShortSetup OR ShortBreakout);
+
+AddDefaultColumns();
+AddDefaultColumnsExt(2, 1);
+
+TextSelector = 1 * LongSetup + 2 * LongBreakout + 3 * ShortSetup + 4 * ShortBreakout;
+
+DetailsTextList =
+	"\nLong Setup" +
+	"\nLong Breakout" +
+	"\nShort Setup" +
+	"\nShort Breakout";
+
+AddMultiTextColumn(TextSelector, DetailsTextList, "Signal Details", Null, IIf(LongSetup OR LongBreakout, colorGreen, colorRed));
+
+// - - - Long - - -
+// Bars defines the lookback and assures that patterns are only displayed as they would in real life.
+PlotShapes(LongPoint1 * shapeDigit1, LongValleyShapeColor, 0, L, -24);
+PlotShapes(LongPoint2 * shapeDigit2, LongValleyShapeColor, 0, H,  24);
+PlotShapes(LongPoint3 * shapeDigit3, LongValleyShapeColor, 0, L, -24);
+Plot(LongTrigger, "LongTrigger", LongValleyShapeColor, 1 + styleNoTitle, Null, Null, 0, 0, def_LineWidth);
+PlotShapes(LongSetup * shapeUpTriangle, LongSetupShapeColor, 0, L, -24);
+PlotShapes(LongBreakout * shapeUpArrow, LongValleyShapeColor, 0, L, -12);
+
+// - - - Short - - -
+// Bars defines the lookback and assures that patterns are only displayed as they would in real life.
+PlotShapes(ShortPoint1 * shapeDigit1, ShortTopShapeColor, 0, H, 24);
+PlotShapes(ShortPoint2 * shapeDigit2, ShortTopShapeColor, 0, L, -24);
+PlotShapes(ShortPoint3 * shapeDigit3, ShortTopShapeColor, 0, H, 24);
+Plot(ShortTrigger, "ShortTrigger", ShortTopShapeColor, 1 + styleNoTitle, Null, Null, 0, 0, def_LineWidth);
+PlotShapes(ShortSetup * shapeDownTriangle, ShortSetupShapeColor, 0, H, -24);
+PlotShapes(ShortBreakout * shapedownArrow, ShortTopShapeColor, 0, H, -12);
+
+if(P123SetupAlert)
+{
+    AddAlert(LongSetup, Audio, Email, "Long Setup", 1, BarComplete, def_BuySound1);
+    AddAlert(ShortSetup, Audio, Email, "Short Setup", 3, BarComplete, def_ShortSound1);
+}
+
+if(P123BreakoutAlert)
+{
+    AddAlert(LongBreakout, Audio, Email, "Long Breakout", 1, BarComplete, def_BuySound1);
+    AddAlert(ShortBreakout, Audio, Email, "Short Breakout", 3, BarComplete, def_ShortSound1);
+}
+
+ToolTip = def_ToolTip;
+
+AddCustomCodeAfterPE();
+
+Title = "PatternExplorer.com - 123 Pattern" + default_PriceTitle + ", " 
+	+ WriteIf(SensitivityMode, "Dynamic", "Static")
+	+ " Sensitivity: Long " + dynamicLongBars + " Bars / Short " + dynamicShortBars + " Bars";
+
+if(Status("action") == actionCommentary) 
+{ 
+	printf("\nThe 123 pattern, also know as double top/bottom often indicates turning points. \n\n"); 
+	printf("Parameters:\n");
+	printf("'Sensitivity Mode': 'Static' can be used in combination with the 'Static bars' parameter to choose between smaller and larger patterns."); 
+	printf("\n\n");
+	printf("'Sensitivity Mode': 'Dynamic' can be used in combination with the 'Pattern Size and Pattern Accuracy' parameter to choose between smaller and larger patterns and desired accuracy.");
+}

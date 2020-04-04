@@ -1,0 +1,58 @@
+/// -----------------------------------------------------------------------------------------
+/// PatternExplorer.com - Sector industry relative strength analysis
+/// Copyright © PatternExplorer.com
+/// @link https://www.PatternExplorer.com
+/// Email: support@PatternExplorer.com
+/// -----------------------------------------------------------------------------------------
+
+FormulaName = "PE - SI Relative Strength";
+
+SetChartOptions(0, chartShowDates | chartWrapTitle);
+
+#pragma nocache
+#include_once <\PEInc\PatternExplorer_f0.afl>
+#include_once "C:\Program Files\AmiBroker\Formulas\PatternExplorer\$ Customization\PE - Configuration.afl"
+#include_once "C:\Program Files\AmiBroker\Formulas\PatternExplorer\$ Customization\PE - Extensions.afl"
+
+AddCustomCodeBeforePE();
+
+_SECTION_BEGIN("Styles");
+IndustryStyle = ParamStyle("Industry", styleLine, maskAll);
+_SECTION_END();
+
+_SECTION_BEGIN("Colors");
+Sectorcolor = ParamColor("Sector", def_SectorColor);
+IndustryColor = ParamColor("Industry", def_IndustryColor);
+MarketStrengthColor = ParamColor("Market", def_MarketStrengthColor);
+_SECTION_END();
+
+AddGradientBackground(def_BackgroundColorSwitch, def_BackgroundTopColor, def_BackgroundBottomColor, def_TitleBackgroundColor);
+StaticVarSetText("PeRsSymbol", "SPY" );
+relStrengthSymbol = StaticVarGetText("PeRsSymbol");
+marketStrength = RelStrength(relStrengthSymbol);
+Plot(marketStrength, "Market strength", MarketStrengthColor, styleLine, Null, Null, 0, 0, def_LineWidth);
+Plot(iRSavg, "", IndustryColor, IndustryStyle, Null, Null, 0, 0, def_LineWidth);
+Plot(sRSavg, "Sector Average", sectorcolor, styleLine, Null, Null, 0, 0, def_LineWidth * 3);
+
+if (inAA)
+{
+    _SECTION_BEGIN("Automatic Analysis");
+    FilterUndefined = ParamToggle("Hide undefined Sectors and Industries", "No,Yes", 1);
+    _SECTION_END();
+
+	Filter = def_Filter AND SymF AND IIf(FilterUndefined, IIf(StrLeft(Name(), 1) != "~", SectorID() > 0 AND IndustryID() > 0, SymFSI), 1);
+	AddDefaultColumns();
+	AddColumn(sRSavg, "Sector RS", 1.2, colorDefault, colorDefault);
+	AddColumn(iRSavg, "Industry RS", 1.2, colorDefault, colorDefault);
+	AddColumn(sFT, "Markets in Sector", 1, colorDefault, colorDefault);
+	AddColumn(iFT, "Markets in Industry", 1, colorDefault, colorDefault);
+}
+
+ToolTip = def_ToolTip;
+
+AddCustomCodeAfterPE();
+
+Title = "PatternExplorer.com - Sector Industry Strength Analysis - " + Name() + " - {{INTERVAL}} {{DATE}}, Relative Strength Symbol " + relStrengthSymbol
+        + "\n" + EncodeColor(SectorColor) + "Sector: " + SectorID(1) + ", " + WriteVal(sFT, 1.0) + WriteIf(sFT > 1, " Markets", " Market") + ", Strength: " + WriteVal(sRSavg, 1.2) + " "
+        + "\n" + EncodeColor(IndustryColor) + "Industry: " + IndustryID(1) + ", " + WriteVal(iFT, 1.0) + WriteIf(iFT > 1, " Markets", " Market") + ", Strength: " + WriteVal(iRSavg, 1.2) + " "
+        + "\n" + EncodeColor(def_MarketStrengthColor) + "Market Strength: " + WriteVal(marketStrength, 1.2) + " ";

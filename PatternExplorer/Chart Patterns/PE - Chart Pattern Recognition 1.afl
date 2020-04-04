@@ -1,0 +1,261 @@
+///  -----------------------------------------------------------------------------------------
+///  PatternExplorer.com - Chart Pattern Recognition 1
+///  Copyright © PatternExplorer.com
+///  @link https://www.PatternExplorer.com
+///  Email: @link support@PatternExplorer.com
+///  -----------------------------------------------------------------------------------------
+
+FormulaName = "PE - Chart Pattern Recognition 1";
+
+SetChartOptions(0, chartShowDates | chartLogarithmic | chartWrapTitle);
+#pragma nocache
+#include_once <\PEInc\PatternExplorer_f0.afl>
+#include_once "C:\Program Files\AmiBroker\Formulas\PatternExplorer\$ Customization\PE - Configuration.afl"
+#include_once "C:\Program Files\AmiBroker\Formulas\PatternExplorer\$ Customization\PE - Extensions.afl"
+
+def_GraphXSpace = 10;
+AddCustomCodeBeforePE();
+AddAlertParamExt(def_AudioAlert, def_EmailAlert, def_BarComplete, "wU7FWbB3zW", "m8kDyrSYGe", "nWNHnbhnn7", def_UseAlertParamsFromChart);
+
+_SECTION_BEGIN("Alerts");
+SRbS = StaticVar(ParamToggle("S/R broken", "Off,On", 1), "jog9SAJSgP", UseAlertParametersFromChart);
+SRcS = StaticVar(ParamToggle("S/R confirmed", "Off,On", 1), "MvSW35shAB", UseAlertParametersFromChart);
+PjabS = StaticVar(ParamToggle("Price just above/below", "Off,On", 1), "DWi79Nsqsh", UseAlertParametersFromChart);
+_SECTION_END();
+
+_SECTION_BEGIN("Sensitivity");
+AddUseParametersFromChart(def_UseParametersFromChart);
+PatternPriceBasis = StaticVar(ParamToggle("Pattern Price Basis", "Close|High & Low", def_PatternPriceBasisCPR), "5n3xo07fhv", UseParametersFromChart);
+SensitivityMode = StaticVar(ParamToggle("Sensitivity Mode", "Dynamic|Static", 0), "c2qrdj5gnu", UseParametersFromChart);
+DesiredPatternLength = StaticVar(Param("Pattern Length (Dynamic)", 50, 1, 200, 1), "av7f6pw8wz", UseParametersFromChart);
+StaticSensitivity = StaticVar(Param("Sensitivity (Static)", 15, 1, 150, 1), "16nh7g5jpe", UseParametersFromChart);
+_SECTION_END();
+
+_SECTION_BEGIN("Misc");
+PlotP1P2 = ParamToggle("Plot P1/P2 Shapes", "Off,On", def_Plot_P1P2_Shapes);
+P1Shape = Param("P1 Shape Typ", 35, 0, 50, 1);
+P2Shape = Param("P2 Shape Typ", 37, 0, 50, 1);
+ParallelLinesSwitch = ParamToggle("Plot Parallel Lines", "Off,On");
+DisRange = Param("Plot Parallel Lines Trigger", 3, 0.0, 10, 0.5);
+_SECTION_END();
+
+_SECTION_BEGIN("Styles");
+Style_SL = ParamStyle("Support", styleLine, maskDefault) + styleNoRescale;
+Style_RL = ParamStyle("Resistance", styleLine, maskDefault) + styleNoRescale;
+Style_PHL = ParamStyle("Parallel Support", styleLine, maskDefault) + styleNoRescale;
+Style_PLL = ParamStyle("Parallel Resistance", styleLine, maskDefault) + styleNoRescale;
+_SECTION_END();
+
+_SECTION_BEGIN("Colors");
+Color_SL =  ParamColor("Support",  def_SLRLColor);
+Color_RL = ParamColor("Resistance", def_SLRLColor);
+ShadowColor = ParamColor("Shadow", def_ShadowColor);
+Color_PLL = Color_RL; // ParamColor("Resistance", colorRed);
+Color_PHL = Color_SL; // ParamColor("Support", def_Color1);
+_SECTION_END();
+
+if (inAA)
+{
+    _SECTION_BEGIN("Pattern Selection");
+    AscTs = ParamToggle("Ascending Triangle", "Off,On", 1);
+    DscTs = ParamToggle("Descending Triangle", "Off,On", 1);
+    STs = ParamToggle("Symmetrically Triangle", "Off,On", 1);
+    ETs = ParamToggle("Expanding Triangle", "Off,On", 1);
+    RWs = ParamToggle("Rising Wedge", "Off,On", 1);
+    FWs = ParamToggle("Falling Wedge", "Off,On", 1);
+    UTs = ParamToggle("Up Trend", "Off,On", 1);
+    DTs = ParamToggle("Down Trend", "Off,On", 1);
+    Rs = ParamToggle("Rectangle", "Off,On", 1);
+    NonDefinedPatterns = ParamToggle("Not defined Patterns", "Off,On", 0);
+    _SECTION_END();
+}
+
+#include_once <\PEInc\PatternExplorer_1.afl>
+
+// Objective is based on the following two conditions:
+// 1. PatternSize
+// 2. Bars since price was inside support & resistance lines
+
+SolutionFound = False;
+
+// xb = LastValue(ValueWhen(Valley, x, 1));
+// xa = LastValue(ValueWhen(Valley, x, 2));
+// xd = LastValue(ValueWhen(top, x, 1));
+// xc = LastValue(ValueWhen(top, x, 2));
+
+Results = Matrix(100, 5, 0);
+
+if (SensitivityMode == False)
+{
+	PrevFilterResult = 0;
+	for (i = 1; i < 100; i++)
+	{
+		Sensitivity = i;
+		CalcPatternBase(PatternPriceBasis, Sensitivity);
+		PeCPRHelper();
+		FilterResult = PeCPRIsSolution(0.2, 0.7, 1.2);
+		Results[i][1] = Sensitivity;
+		Results[i][2] = FilterResult;
+		// _TRACE("Sensitivity: " + NumToStr(Sensitivity, 8.0) + ": " + NumToStr(FilterResult, 8.2));
+		
+		if (FilterResult > 1110)
+				break;
+		
+		if (FilterResult < -0.1)
+		{
+			Sensitivity = Results[i-1][1]; 
+			break;
+		}
+	}
+}
+else
+{
+	Sensitivity = StaticSensitivity;
+}
+	
+CalcPatternBase(PatternPriceBasis, Sensitivity);
+PeCPRHelper();
+#include_once <\PEInc\Lib\PatternExplorer_f06.afl>
+
+GraphZOrder = 0;
+Plot(TRS, "  SL" , Color_SL, Style_SL + styleNoTitle, Null, Null, 0, 0, def_LineWidth);
+Plot(TRR, "  RL" , Color_RL, Style_RL + styleNoTitle, Null, Null, 0, 0, def_LineWidth);
+PlotOHLC(Null, TRR, TRS, Null, "", ShadowColor, styleCloud + styleNoLabel);
+Plot(IIf(ParallelLinesSwitch, PLL_plot, -1e10), "  PLL", Color_PLL, Style_PLL + styleNoTitle, Null, Null, 0, 0, def_LineWidth);
+Plot(IIf(ParallelLinesSwitch, PHL_plot, -1e10), "  PHL", Color_PHL, Style_PHL + styleNoTitle, Null, Null, 0, 0, def_LineWidth);
+
+PlotShapes(IIf(BS & x > LastValue(x) - 3, def_BuyShape, shapeNone), def_BuyShapeColor, 0, Low, -def_BuyShapeOffset);
+PlotShapes(IIf(SS & x > LastValue(x) - 3, def_SellShape, shapeNone), def_SellShapeColor, 0, High, -def_SellShapeOffset);
+
+if (PlotP1P2)
+{
+    PlotShapes(IIf(x == xa & NOT AnZ, P1Shape, shapeNone), Color_SL, 0, SL, -13);
+    PlotShapes(IIf(x == xb & NOT AnZ, P2Shape, shapeNone), Color_SL, 0, SL, -13);
+    PlotShapes(IIf(x == xc & NOT AnZ, P1Shape, shapeNone), Color_RL, 0, H, 13);
+    PlotShapes(IIf(x == xd & NOT AnZ, P2Shape, shapeNone), Color_RL, 0, H, 13);
+}
+
+Buy = def_Buy AND BS;
+Sell = def_Sell AND SS;
+
+if (inAA)
+{
+    CPRFilter =
+        (AscT AND AscTs) | (DscT AND DscTs) | (ST AND STs) |
+        (ET AND ETs) | (RW AND RWs) | (FW AND FWs) |
+        (UT AND UTs) | (DT AND DTs) | (Rectangle AND Rs) |
+        (SupSignals AND NonDefinedPatterns AND NOT DefinedPatterns) |
+        (ResSignals AND NonDefinedPatterns AND NOT DefinedPatterns);
+    
+	Filter = def_Filter AND BarIndex() == LastValue(BarIndex()) AND NOT GroupID() == 253 AND CPRFilter;
+	Filter = Filter AND (Buy || Sell);
+	Filter = Filter AND (SupSignals or ResSignals);
+    
+    AddDefaultColumns();
+    AddDefaultColumnsExt(2, 1);
+	 
+    AddTextColumn(
+        WriteIf(Sup_PriceJustAbove, "Price just above",
+                 WriteIf(Sup_Confirmed, "Confirmed",
+                          WriteIf(Sup_break, "Break", ""))), "Support", 1.2,
+							IIf(Sup_PriceJustAbove OR Sup_Confirmed, colorGreen, colorRed));
+		  
+    AddTextColumn(
+        WriteIf(Res_PriceJustBelow, "Price just below",
+                 WriteIf(Res_Confirmed, "Confirmed",
+                          WriteIf(Res_Break, "Break", ""))), "Resistance", 1.2,
+							IIf(Res_PriceJustBelow OR Res_Confirmed, colorRed, colorGreen));
+        
+    
+    PatternColor =
+        IIf(AscT | FW | UT, colorGreen,
+             IIf(DscT | RW | DT, colorRed,
+                  IIf(ST | ET | Rectangle, colorBlue, colorBlack)));
+						
+    AddTextColumn(PatternText, "Chart Pattern", 0, PatternColor);
+}
+
+
+/*
+Optional code to display signals on parallel lines
+AddTextColumn(
+	WriteIf(PLL_PriceJustAbove, "Price just above",
+	WriteIf(PLL_Confirmed, "Confirmed",
+	WriteIf(PLL_Break, "Break", ""))), "Parallel support line");
+
+AddTextColumn(
+	WriteIf(PHL_PriceJustBelow, "Price just below",
+	WriteIf(PHL_Confirmed, "Confirmed",
+	WriteIf(PHL_Break, "Break", ""))), "Parallel resistance line");
+*/
+
+if (SRbS)
+{
+    AddAlert(Res_Break, Audio, Email, "Resistance broken", 1, BarComplete, def_BuySound1);
+    AddAlert(Sup_break, Audio, Email, "Support broken", 2, BarComplete, def_SellSound1);
+}
+
+if (SRcS)
+{
+    AddAlert(Sup_Confirmed, Audio, Email, "Support confirmed", 1, BarComplete, def_BuySound2);
+    AddAlert(Res_Confirmed, Audio, Email, "Resistance confirmed", 2, BarComplete, def_SellSound2);
+}
+
+if (PjabS)
+{
+    AddAlert(Sup_PriceJustAbove AND PatternDirection == 1, Audio, Email, "Price just above support", 1, BarComplete, def_BuySound3);
+    AddAlert(Res_PriceJustBelow AND PatternDirection == -1, Audio, Email, "Price just below resistance", 2, BarComplete, def_SellSound3);
+    AddAlert(Sup_PriceJustAbove AND PatternDirection == 0, Audio, Email, "Price just above support", 5, BarComplete, def_BuySound3);
+    AddAlert(Res_PriceJustBelow AND PatternDirection == 0, Audio, Email, "Price just below resistance", 5, BarComplete, def_SellSound3);
+}
+
+AddCustomCodeAfterPE();
+
+Title = "PatternExplorer.com - Chart Pattern Recognition 1"
+        + default_PriceTitle + ", " + "Pattern: " + PatternText
+        + EncodeColor(IIf(NOT AnZ, def_TextColor2, colorRed)) + ", Sensitivity Mode = " + WriteIf(SensitivityMode, "Static", "Dynamic") + ", Sensitivity = " + WriteVal(Sensitivity, 1) 
+        + " " + EncodeColor(colorRed) + WriteIf(NOT AnZ, "", " NO POINTS AVAILABLE -> REDUCE SENSITIVITY ");
+
+ST = LastValue(ST);
+AscT = LastValue(AscT);
+DscT = LastValue(DscT);
+ET = LastValue(ET);
+RW = LastValue(RW);
+FW = LastValue(FW);
+UT = LastValue(UT);
+DT = LastValue(DT);
+Rs = LastValue(Rectangle);
+
+ToolTip = def_ToolTip;
+
+if (ST)
+    ToolTip += "\n\n" + "Current Pattern = Symmetrical Triangle" + "\n ";
+
+if (AscT)
+    ToolTip += "\n\n" + "Current Pattern = Ascending Triangle" + "\n ";
+
+if (DscT)
+    ToolTip += "\n\n" + "Current Pattern = Descending Triangle" + "\n ";
+
+if (ET)
+    ToolTip += "\n\n" + "Current Pattern = Expanding Triangle" + "\n ";
+
+if (RW)
+    ToolTip += "\n\n" + "Current Pattern = Rising Wedge" + "\n ";
+
+if (FW)
+    ToolTip += "\n\n" + "Current Pattern = Falling Wedge" + "\n ";
+
+if (UT)
+    ToolTip += "\n\n" + "Current Pattern = Up Channel" + "\n ";
+
+if (DT)
+    ToolTip += "\n\n" + "Current Pattern = Down Channel" + "\n ";
+
+if (Rs)
+    ToolTip += "\n\n" + "Current Pattern = Rectangle" + "\n ";
+
+// Debug:
+// minXToBarCount = (BarCount - Min(xa, Min(xb, Min(xc, xd))));
+// AddColumn(minXToBarCount / DesiredPatternSizeInBars, "minXToBarCount / DesiredPatternSizeInBars", 1.2); 
+// Title = Title + "\n" + "MinX to BarCount: " + minXToBarCount + "\n" + "DesiredPatternSizeInBars: " + DesiredPatternSizeInBars + "\n" + "PatternSize/DesiredPatternSizeInBars: " + NumToStr(minXToBarCount / DesiredPatternSizeInBars, 8.2);
