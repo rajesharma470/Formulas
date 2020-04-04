@@ -52,23 +52,35 @@ function hhBarSince(previousBar, currBar){
    return currBar-pBars[currBar];
 }
 
-function drawTrendLine(upTrendBars, dnTrendBars) {
+function setTrendLine(trendLine, i1Array, i2Array, sBar, eBar) {
+    slope = ((i2Array[eBar] - i1Array[sBar])/(eBar-sBar));
+	for(i=sBar ;i<=eBar ;i++ ) {
+		trendLine[i] = i1Array[sBar] + (i-sBar) * slope;
+	}
+	return trendLine;
+}
+
+function drawTrendLines(upTrendBars, dnTrendBars) {
 	pBar=prevBar=0;
 	upTrend=Null;
-	GfxSetCoordsMode( 1 );
-    GfxSelectPen( colorYellow, 2 );
+	trendLine = Null;
 	for(bar =1; bar < BarCount; bar++) {
 		if(upTrendBars[bar] != 0) {
 		  pBar = llBarSince(prevBar, bar);
-		  //hBar = HHVBars(H, bar-prevBar);
-		  GfxMoveTo(pBar, L[pBar]);
-		  GfxLineTo(bar, H[bar]);
+		  hBar = hhBarSince(pBar, bar);
+		  if(!upTrend) { //to blend trends - this is a fix for gap up between trend changes 
+			 trendLine = setTrendLine(trendLine, H, L, prevBar, pBar);
+		  }
+		  trendLine = setTrendLine(trendLine, L, H, pBar, hBar);
 		  upTrend=True;
 		} else {
 			if(dnTrendBars[bar] != 0) {
 			  pBar = hhBarSince(prevBar, bar);
-			  GfxMoveTo(pBar, H[pBar]);
-			  GfxLineTo(bar, L[bar]);
+			  lBar = llBarSince(pBar, bar);
+			  if(upTrend) {
+				trendLine = setTrendLine(trendLine, L, H, prevBar, pBar);
+			  }
+			  trendLine = setTrendLine(trendLine, H, L, pBar, lBar);
 			  upTrend=False;
 			} 
 		}
@@ -76,36 +88,35 @@ function drawTrendLine(upTrendBars, dnTrendBars) {
 		if(upTrendBars[bar] != 0 || dnTrendBars[bar] != 0) {
 			prevBar = pBar;
 		}else {
-			if(upTrend && H[prevBar] < H[bar]) {
-				//pBar = llBarSince(prevBar, bar);
+			if(upTrend) {
 				hBar = hhBarSince(prevBar, bar);
-				GfxMoveTo(prevBar, H[prevBar]);
-				GfxLineTo(hBar, H[hBar]);
-				prevBar = hBar;
+				trendLine = setTrendLine(trendLine, L, H, prevBar, hBar);
 			}else {
-				if(!upTrend && L[prevBar] > L[bar]) {
+				if(!upTrend) {
 					//pBar = hhBarSince(prevBar, bar);
 					lBar = llBarSince(prevBar, bar);
-					GfxMoveTo(prevBar, L[prevBar]);
-					GfxLineTo(lBar, L[lBar]);
-					prevBar = lBar;
+					trendLine = setTrendLine(trendLine, H, L, prevBar, lBar);
 				}
 			}
 		}
 	}
+	Plot(trendLine, "Trend Line", colorYellow, styleLine);
+	return trendLine;
 }
 
 SetTradeDelays(0, 0, 0, 0);
-timePeriod = Optimize("Time Period", 3, 2, 5, 1);
+oTimeperiod = Optimize("Time Period", 3, 2, 5, 1);
+timePeriod = Param("Time Period", 2, 2, 6, 1);
 upTrend = getUpTrend(timePeriod);
 dnTrend = getDownTrend(timePeriod);
 upTrend = ExRem(upTrend, dnTrend);
 dnTrend = ExRem(dnTrend, upTrend);
 upDnTrend = upDownTrendBars(upTrend, dnTrend);
 
-PlotShapes(IIf(upTrend, Low + shapeHollowUpTriangle, shapeNone), colorBlue);
-PlotShapes(IIf(dnTrend, High + shapeHollowDownTriangle, shapeNone), colorGold); 
-drawTrendLine(upTrend, dnTrend);
+Plot(Close,"Close",colorBlack,styleBarNoTicks | styleCloud, Null, Null, Null, -1 );
+PlotShapes(IIf(upTrend, Low + shapeHollowUpTriangle, shapeNone), colorGreen);
+PlotShapes(IIf(dnTrend, High + shapeHollowDownTriangle, shapeNone), colorRed); 
+drawTrendLines(upTrend, dnTrend);
 
 Buy=upTrend;
 Sell=dnTrend;
