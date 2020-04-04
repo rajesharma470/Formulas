@@ -26,22 +26,6 @@ function getDownTrend(timePeriod) {
 	return getTrendBars( O > C && C < Ref(C, -1), timePeriod);
 }
 
-function upDownTrendBars(trend1Bars, trend2Bars) {
-	result = Null;
-	for(bar =1; bar < BarCount; bar++) {
-		if(trend1Bars[bar] != 0) {
-		  result[bar] = trend1Bars[bar];
-		} else {
-			if(trend2Bars[bar] != 0) {
-			  result[bar] = trend2Bars[bar];
-			} else {
-			  result[bar] = result[bar-1];
-			} 
-		}
-	}
-	return result;
-}
-
 function llBarSince(previousBar, currBar){
    pBars = LLVBars(L, currBar-previousBar);
    return currBar-pBars[currBar];
@@ -106,12 +90,11 @@ function drawTrendLines(upTrendBars, dnTrendBars) {
 
 SetTradeDelays(0, 0, 0, 0);
 oTimeperiod = Optimize("Time Period", 3, 2, 5, 1);
-timePeriod = Param("Time Period", 2, 2, 6, 1);
+timePeriod = Param("Time Period", 3, 2, 6, 1);
 upTrend = getUpTrend(timePeriod);
 dnTrend = getDownTrend(timePeriod);
 upTrend = ExRem(upTrend, dnTrend);
 dnTrend = ExRem(dnTrend, upTrend);
-upDnTrend = upDownTrendBars(upTrend, dnTrend);
 
 Plot(Close,"Close",colorBlack,styleBarNoTicks | styleCloud, Null, Null, Null, -1 );
 PlotShapes(IIf(upTrend, Low + shapeHollowUpTriangle, shapeNone), colorGreen);
