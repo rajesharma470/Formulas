@@ -12,30 +12,110 @@ function getTrendBars(conditionArray, lastBars) {
 			}
 		}
 		if(condition) {
-		   result[bar] = True;
+		   result[bar] = bar;
 		}
 	}
 	return result;
 }
 
+function getUpTrend(timePeriod) {
+	return getTrendBars( O < C && C > Ref(C, -1), timePeriod);
+}
+
+function getDownTrend(timePeriod) {
+	return getTrendBars( O > C && C < Ref(C, -1), timePeriod);
+}
+
+function upDownTrendBars(trend1Bars, trend2Bars) {
+	result = Null;
+	for(bar =1; bar < BarCount; bar++) {
+		if(trend1Bars[bar] != 0) {
+		  result[bar] = trend1Bars[bar];
+		} else {
+			if(trend2Bars[bar] != 0) {
+			  result[bar] = trend2Bars[bar];
+			} else {
+			  result[bar] = result[bar-1];
+			} 
+		}
+	}
+	return result;
+}
+
+function llBarSince(previousBar, currBar){
+   pBars = LLVBars(L, currBar-previousBar);
+   return currBar-pBars[currBar];
+}
+
+function hhBarSince(previousBar, currBar){
+   pBars = HHVBars(H, currBar-previousBar);
+   return currBar-pBars[currBar];
+}
+
+function drawTrendLine(upTrendBars, dnTrendBars) {
+	pBar=prevBar=0;
+	upTrend=Null;
+	GfxSetCoordsMode( 1 );
+    GfxSelectPen( colorYellow, 2 );
+	for(bar =1; bar < BarCount; bar++) {
+		if(upTrendBars[bar] != 0) {
+		  pBar = llBarSince(prevBar, bar);
+		  //hBar = HHVBars(H, bar-prevBar);
+		  GfxMoveTo(pBar, L[pBar]);
+		  GfxLineTo(bar, H[bar]);
+		  upTrend=True;
+		} else {
+			if(dnTrendBars[bar] != 0) {
+			  pBar = hhBarSince(prevBar, bar);
+			  GfxMoveTo(pBar, H[pBar]);
+			  GfxLineTo(bar, L[bar]);
+			  upTrend=False;
+			} 
+		}
+		
+		if(upTrendBars[bar] != 0 || dnTrendBars[bar] != 0) {
+			prevBar = pBar;
+		}else {
+			if(upTrend && H[prevBar] < H[bar]) {
+				//pBar = llBarSince(prevBar, bar);
+				hBar = hhBarSince(prevBar, bar);
+				GfxMoveTo(prevBar, H[prevBar]);
+				GfxLineTo(hBar, H[hBar]);
+				prevBar = hBar;
+			}else {
+				if(!upTrend && L[prevBar] > L[bar]) {
+					//pBar = hhBarSince(prevBar, bar);
+					lBar = llBarSince(prevBar, bar);
+					GfxMoveTo(prevBar, L[prevBar]);
+					GfxLineTo(lBar, L[lBar]);
+					prevBar = lBar;
+				}
+			}
+		}
+	}
+}
+
 SetTradeDelays(0, 0, 0, 0);
 timePeriod = Optimize("Time Period", 3, 2, 5, 1);
-upTrend = getTrendBars( O < C && C > Ref(C, -1), timePeriod);
-dTrend = getTrendBars( O > C && C < Ref(C, -1), timePeriod);
+upTrend = getUpTrend(timePeriod);
+dnTrend = getDownTrend(timePeriod);
+upTrend = ExRem(upTrend, dnTrend);
+dnTrend = ExRem(dnTrend, upTrend);
+upDnTrend = upDownTrendBars(upTrend, dnTrend);
+
+PlotShapes(IIf(upTrend, Low + shapeHollowUpTriangle, shapeNone), colorBlue);
+PlotShapes(IIf(dnTrend, High + shapeHollowDownTriangle, shapeNone), colorGold); 
+drawTrendLine(upTrend, dnTrend);
+
 Buy=upTrend;
-Sell=dTrend;
+Sell=dnTrend;
 Short = Sell;
 Cover = Buy;
-
-Buy = ExRem(Buy,Sell);
-Sell = ExRem(Sell, Buy);
-Short = ExRem(Short,Cover);
-Cover = ExRem(Cover, Short);
 
 ApplyStop(stopTypeLoss, 
           stopModePercent, 
           Optimize( "Max. loss stop level", 1, 1, 10, 1 ), 
-          True ); 
+          True); 
           
 ApplyStop(stopTypeProfit, 
 			stopModePercent, 
