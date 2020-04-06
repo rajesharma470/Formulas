@@ -44,10 +44,46 @@ function setTrendLine(trendLine, i1Array, i2Array, sBar, eBar) {
 	return trendLine;
 }
 
+function setSR(hlValue){
+   sr0 = StaticVarGet("sr-0");
+   if(IsNull(sr0) || sr0 != hlValue) {
+	   for(i=4; i>=1; i--){
+		   prev = StaticVarGet("sr-"+(i-1));
+		   if(!IsNull(prev)) {
+			 StaticVarSet("sr-"+i, prev);
+		   }
+		}
+		StaticVarSet("sr-0", hlValue);
+    }
+}
+
+
+function isUpGannTrend(){
+    sr0 = StaticVarGet("sr-0");
+    sr1 = StaticVarGet("sr-1");
+    sr2 = StaticVarGet("sr-2");
+    sr3 = StaticVarGet("sr-3");
+    sr4 = StaticVarGet("sr-4");
+    isGannTrend = Null;
+	if(!IsNull(sr0) && !IsNull(sr1) && !IsNull(sr2) && !IsNull(sr3)) {
+	   if(sr2 < sr0 && (sr3 < sr0 || sr3 < sr1)) {
+		 isGannTrend = True;
+	   } else {
+	    if(sr0 < sr2 && (sr0 < sr3 || sr1 < sr3)) {
+			isGannTrend = False;
+	    }
+	   }
+	}
+	return isGannTrend;
+}
+
+hTrends=lTrends=Null;
+uGannTrend=dGannTrend=Null;
 function drawTrendLines(upTrendBars, dnTrendBars) {
 	pBar=prevBar=0;
 	upTrend=Null;
 	trendLine = Null;
+	isGannUpTrend= Null;
 	for(bar =1; bar < BarCount; bar++) {
 		if(upTrendBars[bar] != 0) {
 		  pBar = llBarSince(prevBar, bar);
@@ -56,7 +92,14 @@ function drawTrendLines(upTrendBars, dnTrendBars) {
 			 trendLine = setTrendLine(trendLine, H, L, prevBar, pBar);
 		  }
 		  trendLine = setTrendLine(trendLine, L, H, pBar, hBar);
+		  lTrends[pBar]=L[pBar];
+		  ll = L[pBar];
+		  setSR(ll);
 		  upTrend=True;
+		  isGannUpTrend = isUpGannTrend();
+		  if(!IsNull(isGannUpTrend) && isGannUpTrend) {
+			uGannTrend[bar]=True;
+		  } 
 		} else {
 			if(dnTrendBars[bar] != 0) {
 			  pBar = hhBarSince(prevBar, bar);
@@ -65,7 +108,14 @@ function drawTrendLines(upTrendBars, dnTrendBars) {
 				trendLine = setTrendLine(trendLine, L, H, prevBar, pBar);
 			  }
 			  trendLine = setTrendLine(trendLine, H, L, pBar, lBar);
+			  hTrends[pBar]=H[pBar];
+			  hh = H[pBar];
+			  setSR(hh);
 			  upTrend=False;
+			  isGannUpTrend = isUpGannTrend();
+			  if(!IsNull(isGannUpTrend) && !isGannUpTrend) {
+				dGannTrend[bar]=True;
+			  }
 			} 
 		}
 		
@@ -85,38 +135,47 @@ function drawTrendLines(upTrendBars, dnTrendBars) {
 		}
 	}
 	Plot(trendLine, "Trend Line", colorYellow, styleLine);
+	//PlotShapes( IIF( hTrends, shapeDigit9 + shapePositionAbove, shapeNone ), colorGreen ); 
+	//PlotShapes( IIF( lTrends, shapeDigit0, shapeNone ), colorRed );
 	return trendLine;
 }
 
+
+
 SetTradeDelays(0, 0, 0, 0);
-oTimeperiod = Optimize("Time Period", 3, 2, 5, 1);
-timePeriod = Param("Time Period", 3, 2, 6, 1);
+oTimeperiod = Optimize("Time Period", 4, 2, 4, 1);
+timePeriod = oTimeperiod;//Param("Time Period", 3, 2, 6, 1);
 upTrend = getUpTrend(timePeriod);
 dnTrend = getDownTrend(timePeriod);
 upTrend = ExRem(upTrend, dnTrend);
 dnTrend = ExRem(dnTrend, upTrend);
 
 Plot(Close,"Close",colorBlack,styleBarNoTicks | styleCloud, Null, Null, Null, -1 );
-PlotShapes(IIf(upTrend, Low + shapeHollowUpTriangle, shapeNone), colorGreen);
-PlotShapes(IIf(dnTrend, High + shapeHollowDownTriangle, shapeNone), colorRed); 
+//PlotShapes(IIf(upTrend, Low +shapeUpArrow, shapeNone), colorGreen);
+//PlotShapes(IIf(dnTrend, High + shapeDownArrow, shapeNone), colorRed); 
 drawTrendLines(upTrend, dnTrend);
 
-Buy=upTrend;
-Sell=dnTrend;
+PlotShapes(IIf(uGannTrend, Low * shapeDigit1, shapeNone), colorGreen);
+PlotShapes(IIf(dGannTrend, High * shapeDigit2, shapeNone), colorRed); 
+
+Buy=uGannTrend;//upTrend;
+Sell=dGannTrend;//dnTrend;
 Short = Sell;
 Cover = Buy;
 
+
 ApplyStop(stopTypeLoss, 
           stopModePercent, 
-          Optimize( "Max. loss stop level", 1, 1, 10, 1 ), 
+          1,//Optimize( "Max. loss stop level", 1, 1, 10, 1 ), 
           True); 
-          
+
+/*          
 ApplyStop(stopTypeProfit, 
 			stopModePercent, 
 			Optimize( "Trailing profit stop level", 8, 1, 30, 1 ), 
-			True);
+			True);*/
 			
 ApplyStop(stopTypeTrailing , 
 			stopModePercent, 
-			Optimize( "Trailing profit stop level", 4, 1, 30, 1 ), 
+			Optimize( "Trailing profit stop level", 6, 1, 30, 1 ), 
 			True);
